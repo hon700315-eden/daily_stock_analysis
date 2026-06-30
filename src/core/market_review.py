@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-股票智能分析系统 - 大盘复盘模块（支持 A 股 / 港股 / 美股 / 日本 / 韩国）
+股票智能分析系統 - 大盤復盤模組（支援台股 / A 股 / 港股 / 美股 / 日本 / 韓國）
 ===================================
 
 职责：
-1. 根据 MARKET_REVIEW_REGION 配置选择市场区域（cn / hk / us / jp / kr / both）
+1. 依 MARKET_REVIEW_REGION 設定選擇市場區域（tw / cn / hk / us / jp / kr / both）
 2. 执行大盘复盘分析并生成复盘报告
 3. 保存和发送复盘报告
 """
@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 MARKET_REVIEW_HISTORY_CODE = "MARKET"
 MARKET_REVIEW_REPORT_TYPE = "market_review"
 _MARKET_REVIEW_MARKETS = (
+    ('tw', 'tw_title', '台股'),
     ('cn', 'cn_title', 'A 股'),
     ('hk', 'hk_title', '港股'),
     ('us', 'us_title', '美股'),
@@ -113,6 +114,7 @@ def _get_market_review_text(language: str) -> dict[str, str]:
         return {
             "root_title": "# 🎯 Market Review",
             "push_title": "🎯 Market Review",
+            "tw_title": "# Taiwan Market Recap",
             "cn_title": "# A-share Market Recap",
             "us_title": "# US Market Recap",
             "hk_title": "# HK Market Recap",
@@ -123,6 +125,7 @@ def _get_market_review_text(language: str) -> dict[str, str]:
     return {
         "root_title": "# 🎯 大盘复盘",
         "push_title": "🎯 大盘复盘",
+        "tw_title": "# 台股大盤復盤",
         "cn_title": "# A股大盘复盘",
         "us_title": "# 美股大盘复盘",
         "hk_title": "# 港股大盘复盘",
@@ -135,7 +138,7 @@ def _get_market_review_text(language: str) -> dict[str, str]:
 def _resolve_market_review_regions(raw_region: Optional[str]) -> list[str]:
     """Normalize MARKET_REVIEW_REGION into an ordered, non-empty region list."""
 
-    region = str(raw_region or 'cn').strip().lower()
+    region = str(raw_region or 'tw').strip().lower()
     if region == 'both':
         return list(_MARKET_REVIEW_REGION_ORDER)
     if ',' in region:
@@ -144,10 +147,10 @@ def _resolve_market_review_regions(raw_region: Optional[str]) -> list[str]:
             for item in region.split(',')
             if item.strip().lower() in _VALID_MARKET_REVIEW_REGIONS
         }
-        return [market for market in _MARKET_REVIEW_REGION_ORDER if market in requested] or ['cn']
+        return [market for market in _MARKET_REVIEW_REGION_ORDER if market in requested] or ['tw']
     if region in _VALID_MARKET_REVIEW_REGIONS:
         return [region]
-    return ['cn']
+    return ['tw']
 
 
 def run_market_review(
@@ -189,7 +192,7 @@ def run_market_review(
     raw_region = (
         override_region
         if override_region is not None
-        else (getattr(runtime_config, 'market_review_region', 'cn') or 'cn')
+        else (getattr(runtime_config, 'market_review_region', 'tw') or 'tw')
     )
     run_markets = _resolve_market_review_regions(raw_region)
     persist_region = ','.join(run_markets) if len(run_markets) > 1 else run_markets[0]

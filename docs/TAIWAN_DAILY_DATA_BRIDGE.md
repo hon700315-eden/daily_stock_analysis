@@ -17,6 +17,17 @@ directories are ignored.
 
 ## Configuration
 
+Taiwan is the formal default market for the application:
+
+- market: `TW` / runtime region `tw`
+- language: `zh-TW`
+- currency: `TWD`
+- timezone: `Asia/Taipei`
+- price color: red up, green down
+- listed suffix: `.TW`
+- OTC suffix: `.TWO`
+- primary indices: 加權指數、櫃買指數
+
 `TW_STOCK_DATA_ROOT` is optional. It can point to the official Drive root, the
 synchronized `TW_Stock_Dashboard_Clean` root, or a single
 `latest_screening_package.json` file.
@@ -104,10 +115,13 @@ The upstream snapshot `change` field is a price delta and is not used as
 
 ## Missing Data
 
-If a stock is absent from the package/snapshot, the bridge returns no result and
-the existing provider fallback continues. Damaged package/snapshot files or
-missing required snapshot columns raise a provider error so fake market data is
-not produced.
+If a Taiwan stock is absent from the package/snapshot, the bridge returns no
+result. Explicit `.TW` / `.TWO` requests may continue only to verified Taiwan
+fallback sources such as Yahoo Finance. Bare Taiwan common-stock queries and
+Taiwan name queries do not fall back to AkShare, Tushare, Pytdx, Baostock,
+TickFlow, China stock indexes, capital-flow data, or dragon-tiger-list data.
+Damaged package/snapshot files or missing required snapshot columns raise a
+provider error so fake market data is not produced.
 
 Snapshot `volume_shares` is preserved as shares. Package `volumeShares` is used
 when present; no conversion to lots is performed by this bridge.

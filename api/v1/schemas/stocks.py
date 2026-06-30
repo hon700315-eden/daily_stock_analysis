@@ -29,21 +29,29 @@ class StockQuote(BaseModel):
     volume: Optional[float] = Field(None, description="成交量（股）")
     amount: Optional[float] = Field(None, description="成交额（元）")
     update_time: Optional[str] = Field(None, description="更新时间")
+    market: Optional[str] = Field(None, description="市場代碼，例如 tw")
+    currency: Optional[str] = Field(None, description="幣別，例如 TWD")
+    provider: Optional[str] = Field(None, description="實際行情資料來源")
+    source: Optional[str] = Field(None, description="實際行情資料來源，向後相容欄位")
     
     model_config = ConfigDict(json_schema_extra={
         "example": {
-            "stock_code": "600519",
-            "stock_name": "贵州茅台",
-            "current_price": 1800.00,
+            "stock_code": "2330.TW",
+            "stock_name": "台積電",
+            "current_price": 1000.00,
             "change": 15.00,
             "change_percent": 0.84,
-            "open": 1785.00,
-            "high": 1810.00,
-            "low": 1780.00,
-            "prev_close": 1785.00,
+            "open": 985.00,
+            "high": 1010.00,
+            "low": 980.00,
+            "prev_close": 985.00,
             "volume": 10000000,
             "amount": 18000000000,
-            "update_time": "2024-01-01T15:00:00"
+            "update_time": "2024-01-01T15:00:00",
+            "market": "tw",
+            "currency": "TWD",
+            "provider": "TaiwanDailyDataBridgeFetcher",
+            "source": "TaiwanDailyDataBridgeFetcher"
         }
     })
 

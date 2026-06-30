@@ -97,6 +97,15 @@ def normalize_stock_code(stock_code: str) -> str:
     code = stock_code.strip()
     upper = code.upper()
 
+    if upper.startswith("TWSE:"):
+        candidate = upper.split(":", 1)[1].strip()
+        if candidate.isdigit() and 4 <= len(candidate) <= 6:
+            return f"{candidate}.TW"
+    if upper.startswith("TPEX:"):
+        candidate = upper.split(":", 1)[1].strip()
+        if candidate.isdigit() and 4 <= len(candidate) <= 6:
+            return f"{candidate}.TWO"
+
     try:
         from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
 
@@ -1315,7 +1324,10 @@ class DataFetcherManager:
                 except DataFetchError:
                     raise
                 except Exception as exc:
-                    logger.debug("[台股日更转接] 裸代码 %s 未命中: %s", stock_code, exc)
+                    logger.debug("[台股日更轉接] 裸代碼 %s 未命中: %s", stock_code, exc)
+            error_summary = f"台股 {stock_code} 查無日線資料，未切換至中國市場資料源"
+            logger.info("[台股日更轉接] %s", error_summary)
+            raise DataFetchError(error_summary)
 
         # 快速路径：美股使用专用数据源路由；港股先过滤不支持港股日线的数据源
         #   - 配置长桥凭据后: Longbridge 为首选, YFinance/AkShare 兜底
@@ -1809,31 +1821,34 @@ class DataFetcherManager:
         if "." not in stock_code and stock_code.isdigit() and len(stock_code) == 4:
             quote = self._try_fetcher_quote(stock_code, "TaiwanDailyDataBridgeFetcher")
             if quote is not None:
-                logger.info("[实时行情] 台股裸代码 %s 由 TaiwanDailyDataBridgeFetcher 唯一辨识", stock_code)
+                logger.info("[即時行情] 台股裸代碼 %s 由 TaiwanDailyDataBridgeFetcher 唯一辨識", stock_code)
                 return self._enrich_realtime_quote(
                     quote,
                     realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
                 )
+            if log_final_failure:
+                logger.info("[即時行情] 台股裸代碼 %s 查無資料，未切換至中國市場資料源", stock_code)
+            return None
 
         if is_jp or is_kr or is_tw:
-            market_label = "日股" if is_jp else "韩股" if is_kr else "台股"
+            market_label = "日股" if is_jp else "韓股" if is_kr else "台股"
             if is_tw:
                 quote = self._try_fetcher_quote(stock_code, "TaiwanDailyDataBridgeFetcher")
                 if quote is not None:
-                    logger.info(f"[实时行情] {market_label} {stock_code} 成功获取 (来源: TaiwanDailyDataBridgeFetcher)")
+                    logger.info(f"[即時行情] {market_label} {stock_code} 成功取得 (來源: TaiwanDailyDataBridgeFetcher)")
                     return self._enrich_realtime_quote(
                         quote,
                         realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
                     )
             quote = self._try_fetcher_quote(stock_code, "YfinanceFetcher")
             if quote is not None:
-                logger.info(f"[实时行情] {market_label} {stock_code} 成功获取 (来源: YfinanceFetcher)")
+                logger.info(f"[即時行情] {market_label} {stock_code} 成功取得 (來源: YfinanceFetcher)")
                 return self._enrich_realtime_quote(
                     quote,
                     realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
                 )
             if log_final_failure:
-                logger.info(f"[实时行情] {market_label} {stock_code} 无可用数据源")
+                logger.info(f"[即時行情] {market_label} {stock_code} 無可用資料源")
             return None
 
         if is_us or is_hk:
@@ -1959,6 +1974,8 @@ class DataFetcherManager:
                 provider_name = fetcher.name if fetcher is not None else source
                 
                 if quote is not None and quote.has_basic_data():
+                    if fetcher is not None:
+                        setattr(quote, "provider_name", fetcher.name)
                     record_provider_run(
                         data_type="realtime_quote",
                         provider=provider_name,
@@ -2110,6 +2127,7 @@ class DataFetcherManager:
             )
             q = self._call_fetcher_method(fetcher, 'get_realtime_quote', stock_code, **kw)
             if q is not None and q.has_basic_data():
+                setattr(q, "provider_name", fetcher.name)
                 record_provider_run(
                     data_type="realtime_quote",
                     provider=fetcher.name,
@@ -2331,7 +2349,7 @@ class DataFetcherManager:
                 except DataFetchError:
                     raise
                 except Exception as exc:
-                    logger.debug("[股票名称] 台股日更转接未命中 %s: %s", stock_code, exc)
+                    logger.debug("[股票名稱] 台股日更轉接未命中 %s: %s", stock_code, exc)
 
         # 2. 尝试从实时行情中获取（最快，可按需禁用）
         if allow_realtime:

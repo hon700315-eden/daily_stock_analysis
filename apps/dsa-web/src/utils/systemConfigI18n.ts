@@ -49,6 +49,14 @@ const categoryDescriptionMap: Record<UiLanguage, Partial<Record<SystemConfigCate
 
 const fieldTitleMap: Record<string, string> = {
   STOCK_LIST: '自选股列表',
+  DEFAULT_MARKET: '預設市場',
+  DEFAULT_LANGUAGE: '預設語言',
+  DEFAULT_CURRENCY: '預設幣別',
+  DEFAULT_TIMEZONE: '預設時區',
+  DEFAULT_PRICE_COLOR_SCHEME: '預設漲跌色',
+  DEFAULT_LISTED_SUFFIX: '上市 suffix',
+  DEFAULT_OTC_SUFFIX: '上櫃 suffix',
+  DEFAULT_PRIMARY_INDICES: '主要指數',
   TUSHARE_TOKEN: 'Tushare Token',
   BOCHA_API_KEYS: 'Bocha API Keys',
   TAVILY_API_KEYS: 'Tavily API Keys',
@@ -213,7 +221,15 @@ const fieldTitleMap: Record<string, string> = {
 };
 
 const fieldDescriptionMap: Record<string, string> = {
-  STOCK_LIST: '使用逗号分隔股票代码，例如：600519,300750。',
+  STOCK_LIST: '使用逗號分隔股票代碼，例如：2330.TW,6488.TWO。',
+  DEFAULT_MARKET: '正式預設市場；台灣模式使用 tw。',
+  DEFAULT_LANGUAGE: '台灣市場預設語言，預設 zh-TW。',
+  DEFAULT_CURRENCY: '台灣市場預設幣別，預設 TWD。',
+  DEFAULT_TIMEZONE: '台灣市場預設時區，預設 Asia/Taipei。',
+  DEFAULT_PRICE_COLOR_SCHEME: '台股漲跌色預設，red_up 代表紅漲綠跌。',
+  DEFAULT_LISTED_SUFFIX: '台灣上市股票 suffix，預設 .TW。',
+  DEFAULT_OTC_SUFFIX: '台灣上櫃股票 suffix，預設 .TWO。',
+  DEFAULT_PRIMARY_INDICES: '台灣主要指數標籤，預設加權指數與櫃買指數。',
   TUSHARE_TOKEN: '用于接入 Tushare Pro 数据服务的凭据。',
   BOCHA_API_KEYS: '用于新闻检索的 Bocha 密钥，支持逗号分隔多个（最高优先级）。',
   TAVILY_API_KEYS: '用于新闻检索的 Tavily 密钥，支持逗号分隔多个。',
@@ -336,8 +352,8 @@ const fieldDescriptionMap: Record<string, string> = {
   RUN_IMMEDIATELY: '程序启动后立即执行一次分析任务。',
   MARKET_REVIEW_ENABLED: '是否启用大盘复盘流程。',
   DAILY_MARKET_CONTEXT_ENABLED: '默认开启。开启后会把当日大盘摘要注入个股分析，并在高风险或退潮环境下软化激进买入建议；关闭后仍可运行大盘复盘。',
-  MARKET_REVIEW_REGION: '大盘复盘默认市场区域（如 cn/hk/us/jp/kr/both），支持逗号分隔子集，如 `cn,us,jp`。',
-  MARKET_REVIEW_COLOR_SCHEME: '控制大盘复盘指数涨跌幅图标颜色：green_up 为绿涨红跌，red_up 为红涨绿跌。',
+  MARKET_REVIEW_REGION: '台股大盤復盤預設市場區域（如 tw/cn/hk/us/jp/kr/both），支援逗號分隔子集，如 `tw,cn,us`。',
+  MARKET_REVIEW_COLOR_SCHEME: '控制大盤復盤指數漲跌幅圖示顏色：red_up 為紅漲綠跌，green_up 為綠漲紅跌。',
   ANALYSIS_DELAY: '启动任务前的延迟秒数，可用于等待依赖服务就绪。',
   SAVE_CONTEXT_SNAPSHOT: '控制是否持久化整份分析历史 context_snapshot；关闭后不会保存低敏输入概览、市场阶段摘要和增强上下文，但不影响当次分析的 pack 构建或 Prompt 摘要。',
   SCHEDULE_TIME: '每日定时任务执行时间，格式为 HH:MM。',

@@ -9,6 +9,7 @@ from api.v1.router import router as api_v1_router
 from api.v1.schemas.analysis import AnalyzeRequest, MarketReviewRequest
 from api.v1.schemas.common import RootResponse
 from api.v1.schemas.history import HistoryItem
+from api.v1.schemas.portfolio import PortfolioAccountCreateRequest
 from api.v1.schemas.stocks import StockQuote
 
 
@@ -83,7 +84,18 @@ def test_schema_examples_remain_in_openapi_schema() -> None:
         "postmarket",
     ]
     assert history_schema["example"]["stock_code"] == "600519"
-    assert quote_schema["example"]["stock_name"] == "贵州茅台"
+    assert quote_schema["example"]["stock_name"] == "台積電"
+    assert quote_schema["example"]["market"] == "tw"
+    assert quote_schema["example"]["currency"] == "TWD"
+    assert quote_schema["example"]["provider"] == "TaiwanDailyDataBridgeFetcher"
+    assert quote_schema["example"]["source"] == "TaiwanDailyDataBridgeFetcher"
+
+
+def test_portfolio_account_create_defaults_to_taiwan_market() -> None:
+    request = PortfolioAccountCreateRequest(name="台股帳戶")
+
+    assert request.market == "tw"
+    assert request.base_currency == "TWD"
 
 
 def test_analyze_request_supports_legacy_strategies_dict_input() -> None:

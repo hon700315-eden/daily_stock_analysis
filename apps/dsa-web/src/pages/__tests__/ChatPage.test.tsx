@@ -56,7 +56,7 @@ const mockStoreState = {
   sessions: [
     {
       session_id: 'session-1',
-      title: '请简要分析 600519',
+      title: '请简要分析 2330',
       message_count: 2,
       created_at: '2026-03-15T09:00:00Z',
       last_active: '2026-03-15T09:05:00Z',
@@ -154,7 +154,7 @@ beforeEach(() => {
   mockStoreState.sessions = [
     {
       session_id: 'session-1',
-      title: '请简要分析 600519',
+      title: '请简要分析 2330',
       message_count: 2,
       created_at: '2026-03-15T09:00:00Z',
       last_active: '2026-03-15T09:05:00Z',
@@ -302,7 +302,7 @@ describe('ChatPage', () => {
     );
 
     const sessionCard = await screen.findByRole('button', {
-      name: /切换到对话 请简要分析 600519/,
+      name: /切换到对话 请简要分析 2330/,
     });
 
     fireEvent.click(sessionCard);
@@ -318,7 +318,7 @@ describe('ChatPage', () => {
     );
 
     const deleteButton = await screen.findByRole('button', {
-      name: /删除对话 请简要分析 600519/,
+      name: /删除对话 请简要分析 2330/,
     });
 
     fireEvent.click(deleteButton);
@@ -342,7 +342,7 @@ describe('ChatPage', () => {
 
   it('exports the current session from the header action', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: '请分析 600519' },
+      { id: 'user-1', role: 'user', content: '请分析 2330' },
       { id: 'assistant-1', role: 'assistant', content: '趋势偏强', skillName: '趋势分析' },
     ];
 
@@ -423,15 +423,15 @@ describe('ChatPage', () => {
     );
 
     fireEvent.click(await screen.findByRole('checkbox', { name: '均线金叉' }));
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
-      target: { value: '分析 600519' },
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
+      target: { value: '分析 2330' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: '分析 600519',
+          message: '分析 2330',
           skills: ['bull_trend', 'ma_golden_cross'],
         }),
         expect.objectContaining({
@@ -469,15 +469,15 @@ describe('ChatPage', () => {
     expect(skillPanel).toHaveClass('flex');
 
     fireEvent.click(screen.getByRole('checkbox', { name: '均线金叉' }));
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
-      target: { value: '分析 600519' },
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
+      target: { value: '分析 2330' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: '分析 600519',
+          message: '分析 2330',
           skills: ['bull_trend', 'ma_golden_cross'],
         }),
         expect.objectContaining({
@@ -500,7 +500,7 @@ describe('ChatPage', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: '趋势分析' }));
     expect(screen.getByRole('checkbox', { name: '通用分析' })).toBeChecked();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '分析 AAPL' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -597,7 +597,7 @@ describe('ChatPage', () => {
 
   it('sends exported markdown to notification channel and shows success feedback', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: '请分析 600519' },
+      { id: 'user-1', role: 'user', content: '请分析 2330' },
       { id: 'assistant-1', role: 'assistant', content: '趋势偏强', skillName: '趋势分析' },
     ];
     mockFormatSessionAsMarkdown.mockReturnValue('# exported markdown');
@@ -734,7 +734,7 @@ describe('ChatPage', () => {
       expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续分析成交量' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -754,7 +754,7 @@ describe('ChatPage', () => {
       );
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '如果不考虑 TTM 呢' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -860,7 +860,7 @@ describe('ChatPage', () => {
     });
     expect(historyApi.getDetail).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看估值' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -890,7 +890,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '换成 AAPL 看看' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -920,7 +920,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '先不看 600519，换成 AAPL 看看' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -940,7 +940,7 @@ describe('ChatPage', () => {
       );
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看支撑位' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -970,15 +970,15 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
-      target: { value: '比较 600519 和 AAPL' },
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
+      target: { value: '比较 2330 和 AAPL' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          message: '比较 600519 和 AAPL',
+          message: '比较 2330 和 AAPL',
           context: {
             stock_code: '600519',
             stock_name: '贵州茅台',
@@ -1000,15 +1000,15 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
-      target: { value: '分析 600519 和 AAPL 的差异' },
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
+      target: { value: '分析 2330 和 AAPL 的差异' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          message: '分析 600519 和 AAPL 的差异',
+          message: '分析 2330 和 AAPL 的差异',
           context: {
             stock_code: '600519',
             stock_name: '贵州茅台',
@@ -1030,7 +1030,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '分析 AAPL 和 600519 的差异' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1060,7 +1060,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: 'AAPL 和 TSLA 哪个更值得买' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1090,7 +1090,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '分析 AAPL 的差异化优势' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1120,7 +1120,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '分析tsla' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1149,10 +1149,10 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '切换到对话 请简要分析 600519' }));
+    fireEvent.click(screen.getByRole('button', { name: '切换到对话 请简要分析 2330' }));
     expect(mockSwitchSession).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看成交量' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1175,7 +1175,7 @@ describe('ChatPage', () => {
 
   it('restores active stock context from loaded session messages', async () => {
     mockStoreState.messages = [
-      { id: 'm-1', role: 'user', content: '请分析 600519' },
+      { id: 'm-1', role: 'user', content: '请分析 2330' },
       { id: 'm-2', role: 'assistant', content: '600519 分析结果' },
       { id: 'm-3', role: 'user', content: '先不看 600519，换成 AAPL 看看' },
       { id: 'm-4', role: 'assistant', content: 'AAPL 分析结果' },
@@ -1189,7 +1189,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看支撑位' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1232,7 +1232,7 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '开启新对话' }));
     expect(mockStartNewChat).toHaveBeenCalled();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看成交量' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1262,7 +1262,7 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '切换到对话 旧会话' }));
     expect(mockSwitchSession).toHaveBeenCalledWith('session-2');
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看成交量' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1288,7 +1288,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '删除对话 请简要分析 600519' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除对话 请简要分析 2330' }));
     fireEvent.click(screen.getByRole('button', { name: '删除' }));
 
     await waitFor(() => {
@@ -1296,7 +1296,7 @@ describe('ChatPage', () => {
     });
     expect(mockStartNewChat).toHaveBeenCalled();
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/分析 2330/), {
       target: { value: '继续看成交量' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -1322,7 +1322,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: '问股' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/分析 600519/)).toHaveValue('');
+    expect(screen.getByPlaceholderText(/分析 2330/)).toHaveValue('');
     expect(historyApi.getDetail).not.toHaveBeenCalled();
   });
 
@@ -1423,7 +1423,7 @@ describe('ChatPage', () => {
 
   it('shows a jump-to-latest action when new content arrives while the user is away from bottom', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: '请分析 600519' },
+      { id: 'user-1', role: 'user', content: '请分析 2330' },
       { id: 'assistant-1', role: 'assistant', content: '趋势偏强', skillName: '趋势分析' },
     ];
 
@@ -1462,7 +1462,7 @@ describe('ChatPage', () => {
 
 describe('extractStockCodeFromMessage', () => {
   it('returns 6-digit A-share code', () => {
-    expect(extractStockCodeFromMessage('分析 600519 趋势')).toBe('600519');
+    expect(extractStockCodeFromMessage('分析 2330 趋势')).toBe('600519');
     expect(extractStockCodeFromMessage('002460')).toBe('002460');
   });
 
@@ -1476,7 +1476,7 @@ describe('extractStockCodeFromMessage', () => {
   });
 
   it('returns code with .SH/.SZ suffix (normalized)', () => {
-    expect(extractStockCodeFromMessage('看 600519.SH')).toBe('600519');
+    expect(extractStockCodeFromMessage('看 2330.TW')).toBe('600519');
     expect(extractStockCodeFromMessage('000001.SZ')).toBe('000001');
   });
 
@@ -1535,7 +1535,7 @@ describe('extractStockCodeFromMessage', () => {
   });
 
   it('returns all stock codes in message order', () => {
-    expect(extractStockCodesFromMessage('分析 600519 和 AAPL 的差异')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('分析 2330 和 AAPL 的差异')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('分析 AAPL 和 600519 的差异')).toEqual(['AAPL', '600519']);
     expect(extractStockCodesFromMessage('AAPL 和 TSLA 哪个更值得买')).toEqual(['AAPL', 'TSLA']);
     expect(extractStockCodesFromMessage('比较 BRK.B 和 AAPL')).toEqual(['BRK.B', 'AAPL']);
@@ -1551,9 +1551,9 @@ describe('extractStockCodeFromMessage', () => {
   it('returns all HK and A-share variants without exchange affix tokens', () => {
     expect(extractStockCodesFromMessage('比较 01810 和 AAPL')).toEqual(['HK01810', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 1810.HK 和 AAPL')).toEqual(['HK01810', 'AAPL']);
-    expect(extractStockCodesFromMessage('比较 600519.SH 和 AAPL')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('比较 2330.TW 和 AAPL')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 000001.SZ 和 SS')).toEqual(['000001']);
-    expect(extractStockCodesFromMessage('比较 SH600519 和 AAPL')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('比较 SH2330 和 AAPL')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 SZ000001 和 AAPL')).toEqual(['000001', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 BJ920748 和 AAPL')).toEqual(['920748', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 HK01810 和 AAPL')).toEqual(['HK01810', 'AAPL']);
@@ -1577,7 +1577,7 @@ describe('watchlist button with code variants', () => {
     );
 
     const textarea = await screen.findByPlaceholderText(/例如/);
-    fireEvent.change(textarea, { target: { value: '分析 600519.SH' } });
+    fireEvent.change(textarea, { target: { value: '分析 2330.SH' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     expect(await screen.findByText('从自选删除')).toBeInTheDocument();

@@ -158,7 +158,7 @@ def _run_market_review_background(
             "[MarketReview] component=market_review action=background_start "
             "trigger_source=api task_id=%s region=%s",
             query_id or "-",
-            override_region or getattr(runtime_config, "market_review_region", "cn") or "cn",
+            override_region or getattr(runtime_config, "market_review_region", "tw") or "tw",
         )
         report = run_market_review(**review_kwargs)
         if not report:
@@ -516,7 +516,7 @@ def trigger_market_review(
             "[MarketReview] component=market_review action=submit trigger_source=api "
             "task_id=%s region=%s send_notification=%s",
             task_id,
-            getattr(runtime_config, "market_review_region", "cn") or "cn",
+            getattr(runtime_config, "market_review_region", "tw") or "tw",
             request.send_notification,
         )
         task = get_task_queue().submit_background_task(

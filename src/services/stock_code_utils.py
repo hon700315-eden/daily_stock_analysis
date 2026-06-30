@@ -127,6 +127,14 @@ def normalize_code(raw: str) -> Optional[str]:
     text = raw.strip().upper()
     if not text:
         return None
+    if text.startswith("TWSE:"):
+        candidate = text.split(":", 1)[1].strip()
+        if candidate.isdigit() and 4 <= len(candidate) <= 6:
+            return f"{candidate}.TW"
+    if text.startswith("TPEX:"):
+        candidate = text.split(":", 1)[1].strip()
+        if candidate.isdigit() and 4 <= len(candidate) <= 6:
+            return f"{candidate}.TWO"
     from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
 
     tw_symbol = resolve_taiwan_stock_symbol(text)

@@ -314,14 +314,14 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     app = FastAPI(
         title="Daily Stock Analysis API",
         description=(
-            "A股/港股/美股自选股智能分析系统 API\n\n"
-            "## 功能模块\n"
-            "- 股票分析：触发 AI 智能分析\n"
-            "- 历史记录：查询历史分析报告\n"
-            "- 股票数据：获取行情数据\n\n"
-            "## 认证方式\n"
-            "支持可选管理员认证：ADMIN_AUTH_ENABLED=true 时，除登录、状态、健康检查和 "
-            "OpenAPI 文档外，/api/v1/* 需要有效管理员会话 Cookie；关闭时不强制认证。"
+            "台股優先股票智能分析系統 API\n\n"
+            "## 功能模組\n"
+            "- 股票分析：觸發 AI 智能分析\n"
+            "- 歷史記錄：查詢歷史分析報告\n"
+            "- 股票資料：取得行情資料\n\n"
+            "## 認證方式\n"
+            "支援可選管理員認證：ADMIN_AUTH_ENABLED=true 時，除登入、狀態、健康檢查和 "
+            "OpenAPI 文件外，/api/v1/* 需要有效管理員工作階段 Cookie；關閉時不強制認證。"
         ),
         version="1.0.0",
         lifespan=app_lifespan,
@@ -385,7 +385,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             return _frontend_index_response(static_dir)
     else:
         _FRONTEND_NOT_BUILT_HTML = """<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DSA - Frontend Not Built</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}

@@ -100,6 +100,14 @@ SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai",
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
 PROMPT_CACHE_DIAGNOSTICS_LEVELS = {"off", "basic", "debug"}
 TICKFLOW_KLINE_ADJUST_VALUES = {"none", "forward", "backward", "forward_additive", "backward_additive"}
+DEFAULT_MARKET = "tw"
+DEFAULT_LANGUAGE = "zh-TW"
+DEFAULT_CURRENCY = "TWD"
+DEFAULT_TIMEZONE = "Asia/Taipei"
+DEFAULT_PRICE_COLOR_SCHEME = "red_up"
+DEFAULT_LISTED_SUFFIX = ".TW"
+DEFAULT_OTC_SUFFIX = ".TWO"
+DEFAULT_PRIMARY_INDICES = ("加權指數", "櫃買指數")
 # Fallback defaults used when ANSPIRE_API_KEYS is reused as legacy OpenAI-compatible source.
 # These are compatibility examples; actual availability should be validated by Anspire console/model entitlement.
 ANSPIRE_LLM_BASE_URL_DEFAULT = "https://open-gateway.anspire.cn/v6"
@@ -939,6 +947,14 @@ class Config:
     # 报告类型：simple(精简) 或 full(完整)
     report_type: str = "simple"
     report_language: str = "zh"
+    default_market: str = DEFAULT_MARKET
+    default_language: str = DEFAULT_LANGUAGE
+    default_currency: str = DEFAULT_CURRENCY
+    default_timezone: str = DEFAULT_TIMEZONE
+    default_price_color_scheme: str = DEFAULT_PRICE_COLOR_SCHEME
+    default_listed_suffix: str = DEFAULT_LISTED_SUFFIX
+    default_otc_suffix: str = DEFAULT_OTC_SUFFIX
+    default_primary_indices: Tuple[str, str] = DEFAULT_PRIMARY_INDICES
 
     # 仅分析结果摘要：true 时只推送汇总，不含个股详情（Issue #262）
     report_summary_only: bool = False
@@ -1013,9 +1029,9 @@ class Config:
     run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
     daily_market_context_enabled: bool = True   # 是否将大盘环境摘要用于个股分析 Prompt 与保守护栏
-    # 大盘复盘市场区域：cn(A股)、hk(港股)、us(美股)、jp(日股)、kr(韩股)、both(全部市场)
-    market_review_region: str = "cn"
-    market_review_color_scheme: str = "green_up"
+    # 大盤復盤市場區域：tw(台灣)、cn(A 股)、hk(港股)、us(美股)、jp(日股)、kr(韓股)、both(全部市場)
+    market_review_region: str = DEFAULT_MARKET
+    market_review_color_scheme: str = DEFAULT_PRICE_COLOR_SCHEME
     # 交易日检查：默认启用，非交易日跳过执行；设为 false 或 --force-run 可强制执行（Issue #373）
     trading_day_check_enabled: bool = True
 
@@ -1028,8 +1044,8 @@ class Config:
     enable_chip_distribution: bool = True
     # 东财接口补丁开关
     enable_eastmoney_patch: bool = False
-    # 实时行情数据源优先级（逗号分隔）
-    # 推荐顺序：tencent > akshare_sina > efinance > akshare_em > tushare
+    # 实时行情数据源优先级（逗号分隔）；台股會先走 TaiwanDailyDataBridgeFetcher，不使用此中國鏈
+    # 推薦順序（明確中國市場時）：tencent > akshare_sina > efinance > akshare_em > tushare
     # - tencent: 腾讯财经，有量比/换手率/市盈率等，单股查询稳定（推荐）
     # - akshare_sina: 新浪财经，基本行情稳定，但无量比
     # - efinance/akshare_em: 东财全量接口，数据最全但容易被封
@@ -1851,6 +1867,20 @@ class Config:
             single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
             report_type=cls._parse_report_type(os.getenv('REPORT_TYPE', 'simple')),
             report_language=cls._parse_report_language(report_language_raw),
+            default_market=(os.getenv('DEFAULT_MARKET') or DEFAULT_MARKET).strip().lower() or DEFAULT_MARKET,
+            default_language=(os.getenv('DEFAULT_LANGUAGE') or DEFAULT_LANGUAGE).strip() or DEFAULT_LANGUAGE,
+            default_currency=(os.getenv('DEFAULT_CURRENCY') or DEFAULT_CURRENCY).strip().upper() or DEFAULT_CURRENCY,
+            default_timezone=(os.getenv('DEFAULT_TIMEZONE') or DEFAULT_TIMEZONE).strip() or DEFAULT_TIMEZONE,
+            default_price_color_scheme=cls._parse_market_review_color_scheme(
+                os.getenv('DEFAULT_PRICE_COLOR_SCHEME') or DEFAULT_PRICE_COLOR_SCHEME
+            ),
+            default_listed_suffix=(os.getenv('DEFAULT_LISTED_SUFFIX') or DEFAULT_LISTED_SUFFIX).strip().upper() or DEFAULT_LISTED_SUFFIX,
+            default_otc_suffix=(os.getenv('DEFAULT_OTC_SUFFIX') or DEFAULT_OTC_SUFFIX).strip().upper() or DEFAULT_OTC_SUFFIX,
+            default_primary_indices=tuple(
+                item.strip()
+                for item in (os.getenv('DEFAULT_PRIMARY_INDICES') or ",".join(DEFAULT_PRIMARY_INDICES)).split(',')
+                if item.strip()
+            )[:2] or DEFAULT_PRIMARY_INDICES,
             report_summary_only=os.getenv('REPORT_SUMMARY_ONLY', 'false').lower() == 'true',
             report_show_llm_model=report_show_llm_model,
             report_templates_dir=os.getenv('REPORT_TEMPLATES_DIR', 'templates'),
@@ -1930,10 +1960,10 @@ class Config:
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
             daily_market_context_enabled=os.getenv('DAILY_MARKET_CONTEXT_ENABLED', 'true').lower() == 'true',
             market_review_region=cls._parse_market_review_region(
-                os.getenv('MARKET_REVIEW_REGION', 'cn')
+                os.getenv('MARKET_REVIEW_REGION', DEFAULT_MARKET)
             ),
             market_review_color_scheme=cls._parse_market_review_color_scheme(
-                os.getenv('MARKET_REVIEW_COLOR_SCHEME', 'green_up')
+                os.getenv('MARKET_REVIEW_COLOR_SCHEME', DEFAULT_PRICE_COLOR_SCHEME)
             ),
             trading_day_check_enabled=os.getenv('TRADING_DAY_CHECK_ENABLED', 'true').lower() != 'false',
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
@@ -2541,11 +2571,11 @@ class Config:
 
     @classmethod
     def _parse_market_review_region(cls, value: str) -> str:
-        """解析大盘复盘市场区域，非法值记录警告后回退为 cn"""
+        """解析大盤復盤市場區域，非法值記錄警告後回退為 tw"""
         import logging
-        v = (value or 'cn').strip().lower()
-        supported_regions = ('cn', 'hk', 'us', 'jp', 'kr', 'both')
-        ordered_regions = ('cn', 'hk', 'us', 'jp', 'kr')
+        v = (value or DEFAULT_MARKET).strip().lower()
+        supported_regions = ('tw', 'cn', 'hk', 'us', 'jp', 'kr', 'both')
+        ordered_regions = ('tw', 'cn', 'hk', 'us', 'jp', 'kr')
 
         if v in supported_regions:
             if v == 'both':
@@ -2561,22 +2591,22 @@ class Config:
                 return ','.join(normalized)
 
         logging.getLogger(__name__).warning(
-            f"MARKET_REVIEW_REGION 配置值 '{value}' 无效，已回退为默认值 'cn'（合法值：cn / hk / us / jp / kr / both；支持逗号分隔有效值）"
+            f"MARKET_REVIEW_REGION 配置值 '{value}' 無效，已回退為預設值 'tw'（合法值：tw / cn / hk / us / jp / kr / both；支援逗號分隔有效值）"
         )
-        return 'cn'
+        return DEFAULT_MARKET
 
     @classmethod
     def _parse_market_review_color_scheme(cls, value: str) -> str:
         """Parse market-review index change color scheme."""
         import logging
-        v = (value or 'green_up').strip().lower().replace('-', '_')
+        v = (value or DEFAULT_PRICE_COLOR_SCHEME).strip().lower().replace('-', '_')
         if v in ('green_up', 'red_up'):
             return v
         logging.getLogger(__name__).warning(
-            "MARKET_REVIEW_COLOR_SCHEME 配置值 '%s' 无效，已回退为默认值 'green_up'（合法值：green_up / red_up）",
+            "MARKET_REVIEW_COLOR_SCHEME 配置值 '%s' 無效，已回退為預設值 'red_up'（合法值：green_up / red_up）",
             value,
         )
-        return 'green_up'
+        return DEFAULT_PRICE_COLOR_SCHEME
 
     @classmethod
     def _parse_md2img_engine(cls, value: str) -> str:
@@ -2734,7 +2764,7 @@ class Config:
         if not self.stock_list:
             issues.append(ConfigIssue(
                 severity="error",
-                message="未配置 STOCK_LIST。请设置至少一个股票代码，例如：600519,hk00700,AAPL。",
+                message="未配置 STOCK_LIST。請設定至少一個股票代碼，例如：2330.TW,6488.TWO,AAPL。",
                 field="STOCK_LIST",
             ))
         elif self.stock_email_groups:

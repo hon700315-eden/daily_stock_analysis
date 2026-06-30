@@ -1169,17 +1169,28 @@ const settingsHelpZhCN: SettingsHelpMap = {
     notes: ['若需要完全关闭 P3-P5 pack 接入，需要回滚相关代码；当前没有运行时 pack 总开关。'],
   },
   'settings.system.market_review': {
-    title: '大盘分析',
-    summary: '控制大盘分析功能的开关、支持的市场子集和配色方案。',
-    usage: 'MARKET_REVIEW_ENABLED 开启大盘分析；DAILY_MARKET_CONTEXT_ENABLED 默认开启，会把当日大盘摘要用于个股分析 Prompt 与保守护栏；MARKET_REVIEW_REGION 支持输入逗号分隔的市场子集（如 cn,us,jp 或 cn,us,jp,kr），不传可回退为 cn；MARKET_REVIEW_COLOR_SCHEME 选择配色。',
+    title: '台股大盤分析',
+    summary: '控制大盤分析功能的開關、支援的市場子集和配色方案。',
+    usage: 'MARKET_REVIEW_ENABLED 開啟大盤分析；DAILY_MARKET_CONTEXT_ENABLED 預設開啟，會把當日大盤摘要用於個股分析 Prompt 與保守護欄；MARKET_REVIEW_REGION 支援輸入逗號分隔的市場子集（如 tw,cn,us 或 tw,jp,kr），不傳可回退為 tw；MARKET_REVIEW_COLOR_SCHEME 選擇配色。',
     valueNotes: [
-      'cn 覆盖 A 股，hk 覆盖港股，us 覆盖美股，jp 覆盖日股，kr 覆盖韩股，both 覆盖全部（cn,hk,us,jp,kr）。',
-      'MARKET_REVIEW_REGION 直接写入文本框，支持逗号分隔的子集；空值或非法值会回退到 cn。',
-      '默认开启 DAILY_MARKET_CONTEXT_ENABLED；设为 false 后仍可生成大盘复盘报告，但个股分析不会读取大盘摘要或软化买入/加仓建议。',
-      '配色方案影响大盘报告中指数涨跌的颜色显示：green_up 为绿涨红跌，red_up 为红涨绿跌。',
+      'tw 覆蓋台股，cn 覆蓋 A 股，hk 覆蓋港股，us 覆蓋美股，jp 覆蓋日股，kr 覆蓋韓股，both 覆蓋全部（tw,cn,hk,us,jp,kr）。',
+      'MARKET_REVIEW_REGION 直接寫入文字框，支援逗號分隔的子集；空值或非法值會回退到 tw。',
+      '預設開啟 DAILY_MARKET_CONTEXT_ENABLED；設為 false 後仍可生成大盤復盤報告，但個股分析不會讀取大盤摘要或軟化買入/加倉建議。',
+      '配色方案影響大盤報告中指數漲跌的顏色顯示：red_up 為紅漲綠跌，green_up 為綠漲紅跌。',
     ],
-    impact: ['影响分析报告中大盘概览部分的内容和视觉呈现。'],
-    notes: ['大盘分析依赖对应市场的指数数据源可用性。'],
+    impact: ['影響分析報告中大盤概覽部分的內容和視覺呈現。'],
+    notes: ['大盤分析依賴對應市場的指數資料源可用性。'],
+  },
+  'settings.system.market_defaults': {
+    title: '台灣市場預設',
+    summary: '集中管理台灣正式預設市場、語言、幣別、時區、漲跌色與台股 suffix。',
+    usage: 'DEFAULT_MARKET 預設為 tw；DEFAULT_CURRENCY 為 TWD；DEFAULT_TIMEZONE 為 Asia/Taipei；DEFAULT_PRICE_COLOR_SCHEME 為 red_up。',
+    valueNotes: [
+      'DEFAULT_LISTED_SUFFIX 對應上市股票 .TW，DEFAULT_OTC_SUFFIX 對應上櫃股票 .TWO。',
+      'DEFAULT_PRIMARY_INDICES 預設為加權指數與櫃買指數。',
+    ],
+    impact: ['影響 Web 預設顯示、Portfolio 預設幣別、市場復盤與服務端預設市場設定。'],
+    notes: ['台股查詢仍以正式台股索引與 TaiwanDailyDataBridgeFetcher 路由為準。'],
   },
 };
 
@@ -2294,15 +2305,26 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.system.market_review': {
     title: 'Market Review',
     summary: 'Controls the market review feature: on/off, market subset input, and color scheme.',
-    usage: 'MARKET_REVIEW_ENABLED toggles market review; DAILY_MARKET_CONTEXT_ENABLED is on by default and controls whether the daily market summary is injected into stock-analysis prompts and conservative guardrails; MARKET_REVIEW_REGION accepts a comma-separated region subset (for example cn,us,jp or cn,us,jp,kr), and `both` keeps all supported markets; invalid or empty values fall back to `cn`; MARKET_REVIEW_COLOR_SCHEME selects colors.',
+    usage: 'MARKET_REVIEW_ENABLED toggles market review; DAILY_MARKET_CONTEXT_ENABLED is on by default and controls whether the daily market summary is injected into stock-analysis prompts and conservative guardrails; MARKET_REVIEW_REGION accepts a comma-separated region subset (for example tw,cn,us or tw,jp,kr), and `both` keeps all supported markets; invalid or empty values fall back to `tw`; MARKET_REVIEW_COLOR_SCHEME selects colors.',
     valueNotes: [
-      'cn covers A-shares, hk covers Hong Kong, us covers US stocks, jp covers Japan, kr covers Korea, and both covers all (cn,hk,us,jp,kr).',
-      'MARKET_REVIEW_REGION is free-text input; you can enter a comma-separated subset like cn,us or cn,us,jp,kr.',
+      'tw covers Taiwan, cn covers A-shares, hk covers Hong Kong, us covers US stocks, jp covers Japan, kr covers Korea, and both covers all (tw,cn,hk,us,jp,kr).',
+      'MARKET_REVIEW_REGION is free-text input; you can enter a comma-separated subset like tw,cn or tw,us,jp,kr.',
       'DAILY_MARKET_CONTEXT_ENABLED is enabled by default; set it to false to keep market review reports running without injecting the summary into stock analysis or softening buy/add advice.',
-      'Color scheme affects how index changes are displayed: green_up = green for gains/red for losses; red_up = red for gains/green for losses.',
+      'Color scheme affects how index changes are displayed: red_up = red for gains/green for losses; green_up = green for gains/red for losses.',
     ],
     impact: ['Affects the market overview section in analysis reports.'],
     notes: ['Market review depends on the availability of index data sources for the selected markets.'],
+  },
+  'settings.system.market_defaults': {
+    title: 'Taiwan Market Defaults',
+    summary: 'Central settings for the formal Taiwan default market, language, currency, timezone, price colors, and Taiwan suffixes.',
+    usage: 'DEFAULT_MARKET defaults to tw; DEFAULT_CURRENCY is TWD; DEFAULT_TIMEZONE is Asia/Taipei; DEFAULT_PRICE_COLOR_SCHEME is red_up.',
+    valueNotes: [
+      'DEFAULT_LISTED_SUFFIX maps listed stocks to .TW, and DEFAULT_OTC_SUFFIX maps OTC stocks to .TWO.',
+      'DEFAULT_PRIMARY_INDICES defaults to Taiwan Weighted Index and TPEx Index labels.',
+    ],
+    impact: ['Affects Web defaults, Portfolio default currency, market review, and backend default market settings.'],
+    notes: ['Taiwan quote routing still follows the official Taiwan index and TaiwanDailyDataBridgeFetcher.'],
   },
 };
 

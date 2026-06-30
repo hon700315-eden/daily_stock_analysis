@@ -6,7 +6,9 @@ import pandas as pd
 import pytest
 
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager
+from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher, map_tw_symbol
+from src.data.taiwan_stock_index import clear_taiwan_stock_index_cache
 
 
 def _write_package(root, payload):
@@ -15,6 +17,18 @@ def _write_package(root, payload):
     package = path / "latest_screening_package.json"
     package.write_text(json.dumps(payload), encoding="utf-8")
     return package
+
+
+def _write_index_snapshot(root):
+    snapshot_dir = root / "01_market_data/daily_snapshot/trade_date=2026-06-29"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    (snapshot_dir / "snapshot_manifest.json").write_text('{"status":"success"}', encoding="utf-8")
+    (snapshot_dir / "daily_market_normalized.csv").write_text(
+        "trade_date,market,code,name,open,high,low,close\n"
+        "2026-06-29,TWSE,2330,台積電,100,111,99,110\n"
+        "2026-06-29,TPEX,6488,環球晶,200,225,199,220\n",
+        encoding="utf-8",
+    )
 
 
 def _package_payload():
@@ -230,6 +244,7 @@ class _FakeFetcher(BaseFetcher):
 def test_manager_prefers_bridge_for_tw_then_existing_fallback(tmp_path, monkeypatch) -> None:
     _write_package(tmp_path, _package_payload())
     monkeypatch.setenv("TW_STOCK_DATA_ROOT", str(tmp_path))
+    clear_taiwan_stock_index_cache()
     bridge = TaiwanDailyDataBridgeFetcher()
     fallback = _FakeFetcher("YfinanceFetcher")
     manager = DataFetcherManager(fetchers=[fallback, bridge])
@@ -243,3 +258,86 @@ def test_manager_prefers_bridge_for_tw_then_existing_fallback(tmp_path, monkeypa
     assert source == "YfinanceFetcher"
     assert not df.empty
     assert fallback.calls == ["9999.TW"]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_symbol"),
+    [
+        ("2330", "2330.TW"),
+        ("2330.TW", "2330.TW"),
+        ("TWSE:2330", "2330.TW"),
+        ("台積電", "2330.TW"),
+        ("6488", "6488.TWO"),
+        ("6488.TWO", "6488.TWO"),
+        ("TPEX:6488", "6488.TWO"),
+        ("環球晶", "6488.TWO"),
+    ],
+)
+def test_manager_routes_taiwan_daily_queries_to_bridge(tmp_path, monkeypatch, query, expected_symbol) -> None:
+    _write_package(tmp_path, _package_payload())
+    _write_index_snapshot(tmp_path)
+    monkeypatch.setenv("TW_STOCK_DATA_ROOT", str(tmp_path))
+    clear_taiwan_stock_index_cache()
+    fallback = _FakeFetcher("YfinanceFetcher")
+    manager = DataFetcherManager(fetchers=[fallback, TaiwanDailyDataBridgeFetcher()])
+
+    df, source = manager.get_daily_data(query)
+
+    assert source == "TaiwanDailyDataBridgeFetcher"
+    assert not df.empty
+    assert fallback.calls == []
+    quote = manager.get_realtime_quote(query)
+    assert quote is not None
+    assert quote.code == expected_symbol
+    assert getattr(quote, "provider_name") == "TaiwanDailyDataBridgeFetcher"
+
+
+def test_bare_taiwan_code_miss_does_not_fallback_to_china_provider(tmp_path, monkeypatch) -> None:
+    _write_package(tmp_path, _package_payload())
+    monkeypatch.setenv("TW_STOCK_DATA_ROOT", str(tmp_path))
+    clear_taiwan_stock_index_cache()
+    fallback = _FakeFetcher("AkshareFetcher")
+    manager = DataFetcherManager(fetchers=[fallback, TaiwanDailyDataBridgeFetcher()])
+
+    with pytest.raises(DataFetchError, match="未切換至中國市場資料源"):
+        manager.get_daily_data("9999")
+
+    assert manager.get_realtime_quote("9999") is None
+    assert fallback.calls == []
+
+
+class _QuoteOnlyChinaFetcher(BaseFetcher):
+    name = "AkshareFetcher"
+    priority = 1
+
+    def __init__(self) -> None:
+        self.quote_calls = []
+
+    def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        raise NotImplementedError
+
+    def _normalize_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
+        raise NotImplementedError
+
+    def get_realtime_quote(self, stock_code: str, **kwargs):
+        self.quote_calls.append((stock_code, kwargs))
+        return UnifiedRealtimeQuote(
+            code=stock_code,
+            name="中國 fallback",
+            source=RealtimeSource.AKSHARE,
+            market="cn",
+            currency="CNY",
+            data_quality="ok",
+            price=1.0,
+        )
+
+
+def test_taiwan_quote_miss_does_not_call_china_realtime_provider(tmp_path, monkeypatch) -> None:
+    _write_package(tmp_path, _package_payload())
+    monkeypatch.setenv("TW_STOCK_DATA_ROOT", str(tmp_path))
+    clear_taiwan_stock_index_cache()
+    china = _QuoteOnlyChinaFetcher()
+    manager = DataFetcherManager(fetchers=[china, TaiwanDailyDataBridgeFetcher()])
+
+    assert manager.get_realtime_quote("9999") is None
+    assert china.quote_calls == []

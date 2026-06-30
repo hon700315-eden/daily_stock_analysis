@@ -543,24 +543,24 @@ def compute_effective_region(
     Compute effective market review region given config and open markets.
 
     Args:
-        config_region: From MARKET_REVIEW_REGION ('cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both' or comma subset)
+        config_region: From MARKET_REVIEW_REGION ('tw' | 'cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both' or comma subset)
         open_markets: Markets open today
 
     Returns:
         None: caller uses config default (check disabled)
         '': all relevant markets closed, skip market review
-        'cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both': effective subset for today
+        'tw' | 'cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both': effective subset for today
     """
-    markets = ("cn", "hk", "us", "jp", "kr")
-    normalized = (config_region or "cn").strip().lower()
+    markets = ("tw", "cn", "hk", "us", "jp", "kr")
+    normalized = (config_region or "tw").strip().lower()
     if not normalized:
-        normalized = "cn"
+        normalized = "tw"
 
     requested = {
         item.strip() for item in normalized.split(",") if item.strip()
     }
     if not requested:
-        requested = {"cn"}
+        requested = {"tw"}
 
     if "both" in requested:
         requested = set(markets)
@@ -570,7 +570,7 @@ def compute_effective_region(
 
     if not requested:
         # No valid market token left after filtering; follow parser fallback behavior.
-        requested = {"cn"}
+        requested = {"tw"}
 
     # single explicit region: keep single-region return semantics (empty when closed)
     if len(requested) == 1:

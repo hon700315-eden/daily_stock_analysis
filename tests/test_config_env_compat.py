@@ -67,20 +67,37 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
-    def test_market_review_region_falls_back_to_cn_when_no_supported_tokens(
+    def test_market_review_region_falls_back_to_tw_when_no_supported_tokens(
         self, _mock_parse_litellm_yaml, _mock_setup_env
     ):
         with patch.dict(
             os.environ,
             {
-                "STOCK_LIST": "600519",
+                "STOCK_LIST": "2330.TW",
                 "MARKET_REVIEW_REGION": "eu,apac",
             },
             clear=True,
         ):
             config = Config._load_from_env()
 
-        self.assertEqual(config.market_review_region, "cn")
+        self.assertEqual(config.market_review_region, "tw")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_taiwan_market_defaults_load_without_china_provider_keys(
+        self, _mock_parse_litellm_yaml, _mock_setup_env
+    ):
+        with patch.dict(os.environ, {"STOCK_LIST": "2330.TW,6488.TWO"}, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.default_market, "tw")
+        self.assertEqual(config.default_currency, "TWD")
+        self.assertEqual(config.default_timezone, "Asia/Taipei")
+        self.assertEqual(config.default_language, "zh-TW")
+        self.assertEqual(config.market_review_region, "tw")
+        self.assertEqual(config.market_review_color_scheme, "red_up")
+        self.assertIsNone(config.tushare_token)
+        self.assertIsNone(config.tickflow_api_key)
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
@@ -608,7 +625,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
     ) -> None:
         with patch.dict(os.environ, {}, clear=True):
             config = Config._load_from_env()
-        self.assertEqual(config.market_review_color_scheme, "green_up")
+        self.assertEqual(config.market_review_color_scheme, "red_up")
 
         with patch.dict(os.environ, {"MARKET_REVIEW_COLOR_SCHEME": "red-up"}, clear=True):
             config = Config._load_from_env()
@@ -883,7 +900,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         )
         self.assertEqual(
             Config._parse_market_review_region("both"),
-            "cn,hk,us,jp,kr",
+            "tw,cn,hk,us,jp,kr",
         )
 
     @patch("src.config.setup_env")

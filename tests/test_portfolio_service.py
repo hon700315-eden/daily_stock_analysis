@@ -19,6 +19,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import select
 
 from src.config import Config
+from src.data.taiwan_stock_index import clear_taiwan_stock_index_cache
 from src.repositories.portfolio_repo import PortfolioBusyError, PortfolioRepository
 from src.services.portfolio_service import _AvgState, PortfolioConflictError, PortfolioOversellError, PortfolioService
 from src.storage import DatabaseManager, PortfolioDailySnapshot, PortfolioPosition, PortfolioPositionLot, PortfolioTrade
@@ -783,6 +784,25 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(self.service._normalize_symbol("600519.SH"), "SH600519")
         self.assertEqual(self.service._normalize_symbol("SZ000001"), "SZ000001")
         self.assertEqual(self.service._normalize_symbol("000001.SZ"), "SZ000001")
+
+    def test_taiwan_symbols_normalize_for_portfolio_storage(self) -> None:
+        root = Path(self.temp_dir.name) / "tw"
+        snapshot_dir = root / "01_market_data/daily_snapshot/trade_date=2026-06-29"
+        snapshot_dir.mkdir(parents=True)
+        (snapshot_dir / "snapshot_manifest.json").write_text('{"status":"success"}', encoding="utf-8")
+        (snapshot_dir / "daily_market_normalized.csv").write_text(
+            "trade_date,market,code,name,open,high,low,close\n"
+            "2026-06-29,TWSE,2330,台積電,100,111,99,110\n"
+            "2026-06-29,TPEX,6488,環球晶,200,225,199,220\n",
+            encoding="utf-8",
+        )
+        with patch.dict(os.environ, {"TW_STOCK_DATA_ROOT": str(root)}):
+            clear_taiwan_stock_index_cache()
+            self.assertEqual(self.service._normalize_symbol_for_storage("2330"), "2330.TW")
+            self.assertEqual(self.service._normalize_symbol_for_storage("台積電"), "2330.TW")
+            self.assertEqual(self.service._normalize_symbol_for_storage("6488"), "6488.TWO")
+            self.assertEqual(self.service._normalize_symbol_for_storage("環球晶"), "6488.TWO")
+        clear_taiwan_stock_index_cache()
 
     def test_explicit_exchange_position_valuation_uses_exchange_qualified_symbol(self) -> None:
         account = self.service.create_account(name="Explicit Valuation", broker="Demo", market="cn", base_currency="CNY")

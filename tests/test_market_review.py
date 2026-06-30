@@ -58,18 +58,19 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
 
     def test_resolve_market_review_regions_returns_ordered_non_empty_list(self) -> None:
         cases = [
-            (None, ["cn"]),
-            ("", ["cn"]),
-            ("both", ["cn", "hk", "us", "jp", "kr"]),
+            (None, ["tw"]),
+            ("", ["tw"]),
+            ("both", ["tw", "cn", "hk", "us", "jp", "kr"]),
+            ("tw", ["tw"]),
             (" CN,US,cn ", ["cn", "us"]),
             ("us,cn,us", ["cn", "us"]),
             ("jp", ["jp"]),
             ("KR", ["kr"]),
             ("kr,jp,us", ["us", "jp", "kr"]),
-            ("eu,apac", ["cn"]),
-            (",,", ["cn"]),
+            ("eu,apac", ["tw"]),
+            (",,", ["tw"]),
             ("HK", ["hk"]),
-            ("invalid", ["cn"]),
+            ("invalid", ["tw"]),
         ]
 
         for raw_region, expected in cases:
@@ -205,6 +206,11 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
 
     def test_run_market_review_merges_both_regions_with_english_wrappers(self) -> None:
         notifier = self._make_notifier()
+        tw_analyzer = MagicMock()
+        tw_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
+            report="TW body",
+            market_light_snapshot={"region": "tw", "trade_date": "2026-03-06", "score": 62},
+        )
         cn_analyzer = MagicMock()
         cn_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
             report="CN body",
@@ -238,10 +244,11 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         ), patch.object(
             market_review_module,
             "MarketAnalyzer",
-            side_effect=[cn_analyzer, hk_analyzer, us_analyzer, jp_analyzer, kr_analyzer],
+            side_effect=[tw_analyzer, cn_analyzer, hk_analyzer, us_analyzer, jp_analyzer, kr_analyzer],
         ), patch.object(market_review_module, "_persist_market_review_history") as persist_history:
             result = run_market_review(notifier, send_notification=True)
 
+        self.assertIn("# Taiwan Market Recap\n\nTW body", result)
         self.assertIn("# A-share Market Recap\n\nCN body", result)
         self.assertIn("# HK Market Recap\n\nHK body", result)
         self.assertIn("> Next market recap follows", result)
@@ -250,6 +257,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertIn("# Korea Market Recap\n\nKR body", result)
         saved_content = notifier.save_report_to_file.call_args.args[0]
         self.assertTrue(saved_content.startswith("# 🎯 Market Review\n\n"))
+        self.assertIn("# Taiwan Market Recap\n\nTW body", saved_content)
         self.assertIn("# A-share Market Recap\n\nCN body", saved_content)
         self.assertIn("> Next market recap follows", saved_content)
         self.assertIn("# HK Market Recap\n\nHK body", saved_content)
@@ -257,7 +265,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertIn("# Japan Market Recap\n\nJP body", saved_content)
         self.assertIn("# Korea Market Recap\n\nKR body", saved_content)
         self.assertIn(
-            "# A-share Market Recap\n\nCN body",
+            "# Taiwan Market Recap\n\nTW body",
             persist_history.call_args.kwargs["markdown_report"],
         )
         self.assertEqual(
@@ -462,13 +470,13 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertEqual(set(snapshots), {"cn"})
         self.assertEqual(snapshots["cn"]["trade_date"], "2026-03-06")
 
-    def test_run_market_review_invalid_comma_subset_falls_back_to_cn(self) -> None:
+    def test_run_market_review_invalid_comma_subset_falls_back_to_tw(self) -> None:
         notifier = self._make_notifier()
         market_analyzer = MagicMock()
         market_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
-            report="CN body",
+            report="TW body",
             market_light_snapshot={
-                "region": "cn",
+                "region": "tw",
                 "trade_date": "2026-03-06",
                 "score": 60,
             },
@@ -489,12 +497,12 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
                 notifier, send_notification=False, override_region="eu,apac"
             )
 
-        self.assertEqual(result, "CN body")
-        self.assertEqual(analyzer_cls.call_args.kwargs["region"], "cn")
+        self.assertEqual(result, "TW body")
+        self.assertEqual(analyzer_cls.call_args.kwargs["region"], "tw")
         persist_history.assert_called_once()
-        self.assertEqual(persist_history.call_args.kwargs["region"], "cn")
+        self.assertEqual(persist_history.call_args.kwargs["region"], "tw")
         snapshots = persist_history.call_args.kwargs["market_light_snapshots"]
-        self.assertEqual(set(snapshots), {"cn"})
+        self.assertEqual(set(snapshots), set())
 
     def test_render_market_review_payload_markdown_does_not_repeat_title(self) -> None:
         markdown = market_review_module._render_market_review_payload_markdown(

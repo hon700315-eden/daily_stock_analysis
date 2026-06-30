@@ -1,33 +1,26 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-数据源策略层 - 包初始化
+資料源策略層 - 套件初始化
 ===================================
 
-本包实现策略模式管理多个数据源，实现：
-1. 统一的数据获取接口
-2. 自动故障切换
+本套件以策略模式管理多個資料源：
+1. 統一的資料取得介面
+2. 依市場路由的故障切換
 3. 防封禁流控策略
 
-数据源优先级（动态调整）：
-【配置了 TUSHARE_TOKEN 时】
-1. TushareFetcher (Priority 0) - 🔥 最高优先级（动态提升）
-2. EfinanceFetcher (Priority 0) - 同优先级
-3. AkshareFetcher (Priority 1) - 来自 akshare 库
-4. PytdxFetcher (Priority 2) - 来自 pytdx 库（通达信）
-5. BaostockFetcher (Priority 3) - 来自 baostock 库
-6. YfinanceFetcher (Priority 4) - 来自 yfinance 库
+正式預設市場為台灣。台股查詢優先順序：
+1. TaiwanDailyDataBridgeFetcher
+2. 已驗證的台灣 fallback（例如 suffix 台股可走 YfinanceFetcher）
+3. 明確查無資料或可解釋錯誤
 
-【未配置 TUSHARE_TOKEN 时】
-1. EfinanceFetcher (Priority 0) - 最高优先级，来自 efinance 库
-2. AkshareFetcher (Priority 1) - 来自 akshare 库
-3. PytdxFetcher (Priority 2) - 来自 pytdx 库（通达信）
-4. TushareFetcher (Priority 2) - 来自 tushare 库（不可用）
-5. BaostockFetcher (Priority 3) - 来自 baostock 库
-6. YfinanceFetcher (Priority 4) - 来自 yfinance 库
-7. LongbridgeFetcher (Priority 5) - 长桥 OpenAPI（美股/港股兜底）
+中國市場 provider 仍保留，但只在明確中國市場或中國代碼格式時使用：
+- EfinanceFetcher / TencentFetcher / AkshareFetcher
+- TushareFetcher（需 TUSHARE_TOKEN）
+- TickFlowFetcher（需 TICKFLOW_API_KEY）
+- PytdxFetcher / BaostockFetcher
 
-提示：优先级数字越小越优先，同优先级按初始化顺序排列
+提示：priority 數字越小越優先；實際路由仍會先依市場過濾，台股不 fallback 到中國 provider。
 """
 
 from .base import BaseFetcher, DataFetcherManager

@@ -774,7 +774,7 @@ class TestMarketReviewFieldsRegistered(unittest.TestCase):
         self.assertEqual(field["category"], "system")
         self.assertEqual(field["data_type"], "string")
         self.assertEqual(field["ui_control"], "select")
-        self.assertEqual(field["default_value"], "green_up")
+        self.assertEqual(field["default_value"], "red_up")
         self.assertEqual(field["validation"]["enum"], ["green_up", "red_up"])
         self.assertFalse(field["is_sensitive"])
 
@@ -783,10 +783,10 @@ class TestMarketReviewFieldsRegistered(unittest.TestCase):
         self.assertEqual(field["category"], "system")
         self.assertEqual(field["data_type"], "string")
         self.assertEqual(field["ui_control"], "text")
-        self.assertEqual(field["default_value"], "cn")
+        self.assertEqual(field["default_value"], "tw")
         self.assertEqual(
             field["validation"]["allowed_values"],
-            ["cn", "hk", "us", "jp", "kr", "both"],
+            ["tw", "cn", "hk", "us", "jp", "kr", "both"],
         )
         self.assertEqual(
             field["validation"]["delimiter"],

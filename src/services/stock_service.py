@@ -63,6 +63,12 @@ class StockService:
             # - pre_close -> prev_close
             # - volume -> volume
             # - amount -> amount
+            source = getattr(quote, "source", None)
+            provider = (
+                getattr(quote, "provider_name", None)
+                or getattr(source, "value", None)
+                or (str(source) if source is not None else None)
+            )
             return {
                 "stock_code": getattr(quote, "code", stock_code),
                 "stock_name": getattr(quote, "name", None),
@@ -76,6 +82,10 @@ class StockService:
                 "volume": getattr(quote, "volume", None),
                 "amount": getattr(quote, "amount", None),
                 "update_time": datetime.now().isoformat(),
+                "market": getattr(quote, "market", None),
+                "currency": getattr(quote, "currency", None),
+                "provider": provider,
+                "source": provider,
             }
             
         except ImportError:
