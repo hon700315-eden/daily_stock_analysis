@@ -106,6 +106,13 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
             self.assertNotIn("解读成交额、涨跌停结构、市场宽度", prompt)
             self.assertNotIn("A/H/美股市场分析师", prompt)
 
+    def test_tw_region_does_not_fall_back_to_cn(self):
+        analyzer = MarketAnalyzer(region="tw")
+
+        self.assertEqual(analyzer.region, "tw")
+        self.assertEqual(analyzer.profile.region, "tw")
+        self.assertFalse(analyzer.profile.has_market_stats)
+
     def test_cn_prompt_uses_english_shell_when_report_language_is_en(self):
         with patch("src.market_analyzer.get_config", return_value=SimpleNamespace(report_language="en")):
             analyzer = MarketAnalyzer(region="cn")

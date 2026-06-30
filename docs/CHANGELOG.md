@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改進] 將正式預設市場切換為台灣，台股行情與 Portfolio 優先走 TaiwanDailyDataBridgeFetcher，且台股查無資料不再 fallback 到中國市場 provider。
 - [新功能] 接通台股正式 snapshot quote、package chartSeries history 與 package technical API，補齊 TWD、Asia/Taipei、股／張單位與資料狀態。
 - [測試] 補齊台股 retained snapshot 選擇、snapshot_only、技術指標缺值與 stocks quote/history/technical API 回歸測試。
+- [文檔] 新增台股市場概況正式資料可用性稽核，記錄 Drive snapshot/package 欄位與未接線原因。
+- [修復] 修正台股市場復盤區域初始化，避免 `tw` 被降回中國市場。
 
 ## [3.24.1] - 2026-06-28
 
