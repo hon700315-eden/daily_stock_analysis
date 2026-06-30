@@ -5,15 +5,24 @@ the existing dashboard package without changing either upstream system.
 
 ## Data Products
 
-Read priority:
+正式接線分成三條唯讀資料路徑：
+
+- Quote：優先讀取最新有效 retained snapshot。
+- History：優先讀取 `latest_screening_package.json` 內該股票的 `chartSeries`。
+- Technical：優先讀取 `latest_screening_package.json` 內該股票既有技術指標。
+
+Package lookup priority:
 
 1. `06_dashboard_sync/latest_screening_package.json`
 2. `dashboard-app/public/dashboard-data/latest_screening_package.json`
 3. `01_market_data/daily_snapshot/trade_date=YYYY-MM-DD/daily_market_normalized.csv`
 
-The snapshot fallback only uses directories that contain both
-`daily_market_normalized.csv` and `snapshot_manifest.json`; empty holiday
-directories are ignored.
+Snapshot selection scans `trade_date=YYYY-MM-DD` directories and only accepts a
+directory when both `daily_market_normalized.csv` and `snapshot_manifest.json`
+exist, the CSV is non-empty, and the manifest status is one of the formal
+allowed statuses such as `retained` or an existing success/complete status.
+Rejected, staging, empty, damaged, or incomplete snapshots are skipped. No trade
+date is hard-coded.
 
 ## Configuration
 
@@ -113,6 +122,49 @@ Source priority:
 The upstream snapshot `change` field is a price delta and is not used as
 `pct_chg`.
 
+## Quote Contract
+
+`GET /api/v1/stocks/{stock_code}/quote` 對台股回傳正式 snapshot 欄位，並保留
+既有欄位向後相容：
+
+- `symbol` / `stock_code`: `2330.TW`、`6488.TWO`
+- `code`: 不含 suffix 的代碼
+- `name` / `stock_name`: 正式名稱
+- `market` / `exchange`: `TWSE` 或 `TPEX`；既有 `market=tw` 欄位仍保留在舊語意
+- `trade_date`: retained snapshot 的正式交易日
+- `open` / `high` / `low` / `close`
+- `previous_close`
+- `change`: 價差，不作為 `pct_chg`
+- `pct_chg`: 百分點
+- `volume_shares`: 股
+- `volume_lots`: 張，台股 `1 張 = 1000 股`
+- `turnover_amount`: 新台幣成交金額
+- `transaction_count`: 成交筆數
+- `currency`: `TWD`
+- `timezone`: `Asia/Taipei`
+- `source`: `TaiwanDailyDataBridgeFetcher`
+- `data_status`: `available` 或 `snapshot_only`
+
+正式 snapshot 的 `volume` 欄位經實體資料核對為股數口徑；若來源同時提供
+`volume_lots` 才直接沿用，否則 `volume_lots = volume_shares / 1000`。缺少欄位
+時回傳 `null`，不以 `0` 冒充正式數字。
+
+## History And Technical
+
+`GET /api/v1/stocks/{stock_code}/history` 對台股的來源順序：
+
+1. `latest_screening_package.json` 的該股票 `chartSeries`
+2. 找不到正式多日序列時，只回傳最新 snapshot 並標記 `data_status=snapshot_only`
+3. 股票完全不存在時回傳查無資料狀態或 404，由呼叫端依既有 API 語意處理
+
+`snapshot_only` 代表只有最新 retained snapshot，不代表完整多日歷史；API 不會
+把單日 snapshot 偽裝成多日 K 線。
+
+`GET /api/v1/stocks/{stock_code}/technical` 讀取 package 中該股票實際存在的
+MA5、MA10、MA20、MA60、Bollinger、KD、MACD、RR 與量能欄位。缺少 package、
+缺少該股票或缺少單一指標時，回傳 `technical_unavailable` 或 `null`，不使用
+其他股票資料，也不以單日 snapshot 重新計算 MA、KD、MACD 或 Bollinger。
+
 ## Missing Data
 
 If a Taiwan stock is absent from the package/snapshot, the bridge returns no
@@ -123,8 +175,13 @@ TickFlow, China stock indexes, capital-flow data, or dragon-tiger-list data.
 Damaged package/snapshot files or missing required snapshot columns raise a
 provider error so fake market data is not produced.
 
-Snapshot `volume_shares` is preserved as shares. Package `volumeShares` is used
-when present; no conversion to lots is performed by this bridge.
+Snapshot `volume` / `volume_shares` is preserved as shares. Package
+`volumeShares` is used when present. API responses additionally expose
+`volume_lots` for Taiwan stocks using the formal `1 lot = 1000 shares` rule.
+
+Taiwan bridge failures do not fall back to China market providers. Bare Taiwan
+common-stock quote/history requests stop at the Taiwan bridge when no formal
+Taiwan data is available.
 
 ## Upstream Contract
 

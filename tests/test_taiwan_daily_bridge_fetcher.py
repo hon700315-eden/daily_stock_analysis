@@ -4,7 +4,9 @@ import json
 
 import pandas as pd
 import pytest
+from fastapi.testclient import TestClient
 
+from api.app import create_app
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher, map_tw_symbol
@@ -31,6 +33,22 @@ def _write_index_snapshot(root):
     )
 
 
+def _write_snapshot(root, trade_date, status, rows):
+    snapshot_dir = root / f"01_market_data/daily_snapshot/trade_date={trade_date}"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    (snapshot_dir / "snapshot_manifest.json").write_text(
+        json.dumps({"status": status, "trade_date": trade_date}),
+        encoding="utf-8",
+    )
+    header = "trade_date,market,code,name,open,high,low,close,change,volume,amount,transactions,source,source_status\n"
+    body = "\n".join(
+        ",".join(str(value) for value in row)
+        for row in rows
+    )
+    (snapshot_dir / "daily_market_normalized.csv").write_text(header + body + "\n", encoding="utf-8")
+    return snapshot_dir
+
+
 def _package_payload():
     return {
         "metadata": {"schemaVersion": "TW_STOCK_SCREENING_PACKAGE_V1", "volumeUnit": "lots"},
@@ -47,6 +65,15 @@ def _package_payload():
                     "pct_chg": 1.23,
                     "change": 9.0,
                     "ma5": 108.0,
+                    "bollinger_upper": 120.0,
+                    "bollinger_mid": 109.0,
+                    "bollinger_lower": 98.0,
+                    "kd_k": 55.0,
+                    "kd_d": 50.0,
+                    "macd": 1.2,
+                    "macd_signal": 0.8,
+                    "macd_hist": 0.4,
+                    "rr": 1.8,
                 }
             ],
             "strong_trending": [
@@ -69,7 +96,23 @@ def _package_payload():
                 "name": "台積電",
                 "data": [
                     {"date": "2026-06-26", "open": 100, "high": 105, "low": 99, "close": 100, "volumeShares": 10000},
-                    {"date": "2026-06-29", "open": 106, "high": 111, "low": 105, "close": 110, "volumeShares": 12000},
+                    {
+                        "date": "2026-06-29",
+                        "open": 106,
+                        "high": 111,
+                        "low": 105,
+                        "close": 110,
+                        "volumeShares": 12000,
+                        "ma5": 108.0,
+                        "bollingerUpper": 120.0,
+                        "bollingerMiddle": 109.0,
+                        "bollingerLower": 98.0,
+                        "kdK": 55.0,
+                        "kdD": 50.0,
+                        "macdDif": 1.2,
+                        "macdSignal": 0.8,
+                        "macdHistogram": 0.4,
+                    },
                 ],
             },
             "6488": {
@@ -108,7 +151,7 @@ def test_package_reads_name_quote_volume_indicators_and_existing_pct(tmp_path) -
     assert quote.volume == 12000
     # pct_chg is percentage points, not a decimal ratio, and package value wins.
     assert quote.change_pct == 1.23
-    assert quote.change_amount is None
+    assert quote.change_amount == 9.0
     assert fetcher.get_stock_name("2330") == "台積電"
 
     df = fetcher.get_daily_data("2330.TW", days=5)
@@ -127,7 +170,7 @@ def test_package_computes_pct_from_chart_series_and_does_not_use_change(tmp_path
     quote = fetcher.get_realtime_quote("6488.TWO")
     assert quote is not None
     assert quote.change_pct == 10.0
-    assert quote.change_amount is None
+    assert quote.change_amount == -43.0
 
 
 @pytest.mark.parametrize("previous_close", [None, 0])
@@ -185,6 +228,29 @@ def test_snapshot_reads_twse_tpex_and_preserves_volume_shares_unit(tmp_path) -> 
     assert tw_quote.change_pct is None
 
 
+def test_snapshot_selects_latest_retained_and_skips_rejected(tmp_path) -> None:
+    _write_snapshot(
+        tmp_path,
+        "2026-06-28",
+        "retained",
+        [["2026-06-28", "TWSE", "2330", "台積電", 100, 111, 99, 110, 9, 12000, 1320000, 120, "twse", "success"]],
+    )
+    _write_snapshot(
+        tmp_path,
+        "2026-06-29",
+        "rejected",
+        [["2026-06-29", "TWSE", "2330", "台積電", 100, 111, 99, 999, 9, 12000, 1320000, 120, "twse", "success"]],
+    )
+    fetcher = TaiwanDailyDataBridgeFetcher(tmp_path)
+
+    quote = fetcher.get_quote_payload("2330.TW")
+
+    assert quote is not None
+    assert quote["trade_date"] == "2026-06-28"
+    assert quote["close"] == 110.0
+    assert quote["data_status"] == "snapshot_only"
+
+
 def test_snapshot_computes_pct_from_previous_trade_date_close(tmp_path) -> None:
     previous_dir = tmp_path / "01_market_data/daily_snapshot/trade_date=2026-06-26"
     latest_dir = tmp_path / "01_market_data/daily_snapshot/trade_date=2026-06-29"
@@ -207,7 +273,70 @@ def test_snapshot_computes_pct_from_previous_trade_date_close(tmp_path) -> None:
     quote = fetcher.get_realtime_quote("2330.TW")
     assert quote is not None
     assert quote.change_pct == 10.0
-    assert quote.change_amount is None
+    assert quote.change_amount == 9.0
+
+
+def test_quote_payload_exposes_formal_taiwan_contract(tmp_path) -> None:
+    _write_snapshot(
+        tmp_path,
+        "2026-06-29",
+        "retained",
+        [["2026-06-29", "TPEX", "6488", "環球晶", 200, 225, 199, 220, -43, 22000, 4840000, 88, "tpex", "success"]],
+    )
+    fetcher = TaiwanDailyDataBridgeFetcher(tmp_path)
+
+    payload = fetcher.get_quote_payload("6488.TWO")
+
+    assert payload is not None
+    assert payload["symbol"] == "6488.TWO"
+    assert payload["market"] == "TPEX"
+    assert payload["currency"] == "TWD"
+    assert payload["volume_shares"] == 22000.0
+    assert payload["volume_lots"] == 22.0
+    assert payload["transaction_count"] == 88
+    assert payload["source"] == "TaiwanDailyDataBridgeFetcher"
+
+
+def test_history_and_technical_use_chart_series_without_fabricating_snapshot_history(tmp_path) -> None:
+    payload = _package_payload()
+    payload["chartSeries"].pop("6488")
+    _write_package(tmp_path, payload)
+    _write_snapshot(
+        tmp_path,
+        "2026-06-29",
+        "retained",
+        [["2026-06-29", "TPEX", "6488", "環球晶", 200, 225, 199, 220, -43, 22000, 4840000, 88, "tpex", "success"]],
+    )
+    fetcher = TaiwanDailyDataBridgeFetcher(tmp_path)
+
+    history = fetcher.get_history_payload("2330.TW")
+    technical = fetcher.get_technical_payload("2330.TW")
+    snapshot_only = fetcher.get_history_payload("6488.TWO")
+    snapshot_technical = fetcher.get_technical_payload("6488.TWO")
+    missing_history = fetcher.get_history_payload("9999.TW")
+    missing_technical = fetcher.get_technical_payload("9999.TW")
+
+    assert history is not None
+    assert history["data_status"] == "available"
+    assert len(history["data"]) == 2
+    assert history["data"][-1]["ma5"] == 108.0
+    assert technical is not None
+    assert technical["availability"] == "available"
+    assert technical["indicators"]["ma5"] == 108.0
+    assert technical["indicators"]["bollinger_upper"] == 120.0
+    assert technical["indicators"]["kd_k"] == 55.0
+    assert technical["indicators"]["macd_histogram"] == 0.4
+    assert technical["indicators"]["rr"] == 1.8
+    assert snapshot_only is not None
+    assert snapshot_only["data_status"] == "snapshot_only"
+    assert len(snapshot_only["data"]) == 1
+    assert snapshot_technical is not None
+    assert snapshot_technical["availability"] == "technical_unavailable"
+    assert snapshot_technical["indicators"]["ma5"] is None
+    assert snapshot_technical["indicators"]["kd_k"] is None
+    assert snapshot_technical["indicators"]["macd_histogram"] is None
+    assert missing_history is None
+    assert missing_technical is None
 
 
 def test_snapshot_rejects_missing_required_columns(tmp_path) -> None:
@@ -258,6 +387,54 @@ def test_manager_prefers_bridge_for_tw_then_existing_fallback(tmp_path, monkeypa
     assert source == "YfinanceFetcher"
     assert not df.empty
     assert fallback.calls == ["9999.TW"]
+
+
+def test_stock_api_quote_history_and_technical_use_formal_taiwan_payload(tmp_path, monkeypatch) -> None:
+    payload = _package_payload()
+    payload["chartSeries"].pop("6488")
+    _write_package(tmp_path, payload)
+    _write_snapshot(
+        tmp_path,
+        "2026-06-29",
+        "retained",
+        [
+            ["2026-06-29", "TWSE", "2330", "台積電", 106, 111, 105, 110, 9, 12000, 1320000, 120, "twse", "success"],
+            ["2026-06-29", "TPEX", "6488", "環球晶", 210, 225, 209, 220, -43, 22000, 4840000, 88, "tpex", "success"],
+        ],
+    )
+    monkeypatch.setenv("TW_STOCK_DATA_ROOT", str(tmp_path))
+    client = TestClient(create_app(static_dir=tmp_path))
+
+    quote = client.get("/api/v1/stocks/2330.TW/quote")
+    history = client.get("/api/v1/stocks/2330.TW/history")
+    technical = client.get("/api/v1/stocks/2330.TW/technical")
+    snapshot_only = client.get("/api/v1/stocks/6488.TWO/history")
+    snapshot_technical = client.get("/api/v1/stocks/6488.TWO/technical")
+    not_found_history = client.get("/api/v1/stocks/9999.TW/history")
+    not_found_technical = client.get("/api/v1/stocks/9999.TW/technical")
+
+    assert quote.status_code == 200
+    assert quote.json()["symbol"] == "2330.TW"
+    assert quote.json()["trade_date"] == "2026-06-29"
+    assert quote.json()["volume_shares"] == 12000.0
+    assert quote.json()["volume_lots"] == 12.0
+    assert quote.json()["source"] == "TaiwanDailyDataBridgeFetcher"
+    assert history.status_code == 200
+    assert history.json()["data_status"] == "available"
+    assert len(history.json()["data"]) == 2
+    assert technical.status_code == 200
+    assert technical.json()["availability"] == "available"
+    assert technical.json()["indicators"]["ma5"] == 108.0
+    assert snapshot_only.status_code == 200
+    assert snapshot_only.json()["data_status"] == "snapshot_only"
+    assert snapshot_technical.status_code == 200
+    assert snapshot_technical.json()["availability"] == "technical_unavailable"
+    assert snapshot_technical.json()["indicators"]["ma5"] is None
+    assert not_found_history.status_code == 200
+    assert not_found_history.json()["data_status"] == "not_found"
+    assert not_found_history.json()["data"] == []
+    assert not_found_technical.status_code == 404
+    assert not_found_technical.json()["error"] == "not_found"
 
 
 @pytest.mark.parametrize(

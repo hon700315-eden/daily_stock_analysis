@@ -724,57 +724,57 @@ def _execute_tools(
 
     results: List[Dict[str, Any]] = []
 
-    if len(tool_calls) == 1:
-        tc = tool_calls[0]
-        if progress_callback:
-            progress_callback({"type": "tool_start", "step": step, "tool": tc.name})
-        timeout_triggered = False
-        if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0:
-            pool = ThreadPoolExecutor(max_workers=1)
-            ctx = contextvars.copy_context()
-            try:
-                future = pool.submit(ctx.run, _exec_single, tc)
+    if len(tool_calls) == 1 or not (tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0):
+        for tc in tool_calls:
+            if progress_callback:
+                progress_callback({"type": "tool_start", "step": step, "tool": tc.name})
+            timeout_triggered = False
+            if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0:
+                pool = ThreadPoolExecutor(max_workers=1)
+                ctx = contextvars.copy_context()
                 try:
-                    _, result_str, success, dur, cached, guard_result = future.result(timeout=tool_wait_timeout_seconds)
-                except FuturesTimeoutError:
-                    timeout_triggered = True
-                    future.cancel()
-                    timeout_label = f"{tool_wait_timeout_seconds:.2f}s"
-                    logger.warning("Tool '%s' timed out after %s at step %d", tc.name, timeout_label, step)
-                    result_str = json.dumps({
-                        "error": f"Tool execution timed out after {timeout_label}",
-                        "timeout": True,
-                    })
-                    success = False
-                    dur = round(tool_wait_timeout_seconds, 2)
-                    cached = False
-                    guard_result = None
-            finally:
-                pool.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
-        else:
-            _, result_str, success, dur, cached, guard_result = _exec_single(tc)
-        if progress_callback:
-            progress_callback({"type": "tool_done", "step": step, "tool": tc.name, "success": success, "duration": dur})
-        log_entry = {
-            "step": step, "tool": tc.name, "arguments": tc.arguments,
-            "success": success, "duration": dur, "result_length": len(result_str),
-            "cached": cached,
-        }
-        if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0 and not success:
-            try:
-                if json.loads(result_str).get("timeout") is True:
-                    log_entry["timeout"] = True
-            except (TypeError, ValueError, json.JSONDecodeError):
-                pass
-        if guard_result is not None:
-            log_entry.update({
-                "guarded": True,
-                "expected_stock_code": guard_result.get("expected_stock_code"),
-                "requested_stock_code": guard_result.get("requested_stock_code"),
-                "allowed_stock_codes": guard_result.get("allowed_stock_codes", []),
-            })
-        tool_calls_log.append(log_entry)
-        results.append({"tc": tc, "result_str": result_str})
+                    future = pool.submit(ctx.run, _exec_single, tc)
+                    try:
+                        _, result_str, success, dur, cached, guard_result = future.result(timeout=tool_wait_timeout_seconds)
+                    except FuturesTimeoutError:
+                        timeout_triggered = True
+                        future.cancel()
+                        timeout_label = f"{tool_wait_timeout_seconds:.2f}s"
+                        logger.warning("Tool '%s' timed out after %s at step %d", tc.name, timeout_label, step)
+                        result_str = json.dumps({
+                            "error": f"Tool execution timed out after {timeout_label}",
+                            "timeout": True,
+                        })
+                        success = False
+                        dur = round(tool_wait_timeout_seconds, 2)
+                        cached = False
+                        guard_result = None
+                finally:
+                    pool.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
+            else:
+                _, result_str, success, dur, cached, guard_result = _exec_single(tc)
+            if progress_callback:
+                progress_callback({"type": "tool_done", "step": step, "tool": tc.name, "success": success, "duration": dur})
+            log_entry = {
+                "step": step, "tool": tc.name, "arguments": tc.arguments,
+                "success": success, "duration": dur, "result_length": len(result_str),
+                "cached": cached,
+            }
+            if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0 and not success:
+                try:
+                    if json.loads(result_str).get("timeout") is True:
+                        log_entry["timeout"] = True
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    pass
+            if guard_result is not None:
+                log_entry.update({
+                    "guarded": True,
+                    "expected_stock_code": guard_result.get("expected_stock_code"),
+                    "requested_stock_code": guard_result.get("requested_stock_code"),
+                    "allowed_stock_codes": guard_result.get("allowed_stock_codes", []),
+                })
+            tool_calls_log.append(log_entry)
+            results.append({"tc": tc, "result_str": result_str})
     else:
         for tc in tool_calls:
             if progress_callback:
@@ -782,15 +782,17 @@ def _execute_tools(
 
         pool = ThreadPoolExecutor(max_workers=min(len(tool_calls), 5))
         timeout_triggered = False
-        try:
-            futures = {pool.submit(contextvars.copy_context().run, _exec_single, tc): tc for tc in tool_calls}
-            pending = set(futures)
-            for future in as_completed(
-                futures,
-                timeout=tool_wait_timeout_seconds if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0 else None,
+        completed_results = []
+        flushed_completed = False
+
+        def _flush_completed_results() -> None:
+            nonlocal flushed_completed
+            if flushed_completed:
+                return
+            for _, tc_item, result_str, success, dur, cached, guard_result in sorted(
+                completed_results,
+                key=lambda item: item[0],
             ):
-                pending.discard(future)
-                tc_item, result_str, success, dur, cached, guard_result = future.result()
                 if progress_callback:
                     progress_callback({"type": "tool_done", "step": step, "tool": tc_item.name, "success": success, "duration": dur})
                 log_entry = {
@@ -807,6 +809,23 @@ def _execute_tools(
                     })
                 tool_calls_log.append(log_entry)
                 results.append({"tc": tc_item, "result_str": result_str})
+            flushed_completed = True
+
+        try:
+            futures = {
+                pool.submit(contextvars.copy_context().run, _exec_single, tc): (idx, tc)
+                for idx, tc in enumerate(tool_calls)
+            }
+            pending = set(futures)
+            for future in as_completed(
+                futures,
+                timeout=tool_wait_timeout_seconds if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0 else None,
+            ):
+                pending.discard(future)
+                tc_item, result_str, success, dur, cached, guard_result = future.result()
+                idx, _ = futures[future]
+                completed_results.append((idx, tc_item, result_str, success, dur, cached, guard_result))
+            _flush_completed_results()
         except FuturesTimeoutError:
             timeout_triggered = True
             timeout_label = (
@@ -815,7 +834,8 @@ def _execute_tools(
                 else "the configured limit"
             )
             logger.warning("Tool batch timed out after %s at step %d", timeout_label, step)
-            for future, tc_item in futures.items():
+            _flush_completed_results()
+            for future, (_, tc_item) in futures.items():
                 if future in pending:
                     future.cancel()
                     result_str = json.dumps({

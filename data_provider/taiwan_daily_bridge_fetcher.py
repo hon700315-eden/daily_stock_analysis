@@ -22,7 +22,28 @@ _PACKAGE_CANDIDATES = (
     Path("dashboard-app/public/dashboard-data/latest_screening_package.json"),
 )
 _SNAPSHOT_REQUIRED = {"trade_date", "market", "code", "name", "open", "high", "low", "close"}
+_SNAPSHOT_ALLOWED_STATUSES = {"retained", "success", "completed", "complete", "ok"}
 _PACKAGE_PCT_FIELDS = ("pct_chg", "change_pct", "changePercent", "change_pct_value")
+_TECHNICAL_FIELD_ALIASES = {
+    "ma5": ("ma5", "MA5"),
+    "ma10": ("ma10", "MA10"),
+    "ma20": ("ma20", "MA20"),
+    "ma60": ("ma60", "MA60"),
+    "bollinger_upper": ("bollinger_upper", "bollingerUpper", "bbUpper"),
+    "bollinger_middle": ("bollinger_mid", "bollinger_middle", "bollingerMiddle", "bbMid"),
+    "bollinger_lower": ("bollinger_lower", "bollingerLower", "bbLower"),
+    "kd_k": ("kd_k", "kdK"),
+    "kd_d": ("kd_d", "kdD"),
+    "macd_dif": ("macd_dif", "macdDif", "macd", "dif"),
+    "macd_signal": ("macd_signal", "macdSignal", "macdDea", "dea"),
+    "macd_histogram": ("macd_hist", "macdHistogram", "macdHist", "histogram"),
+    "rr": ("rr", "RR"),
+    "volume_lots": ("volume_lots", "volumeLots", "volume"),
+    "volume_shares": ("volume_shares", "volumeShares"),
+    "volume_3d_avg": ("volume_3d_avg",),
+    "volume_10d_avg": ("volume_10d_avg",),
+    "volume_20d_avg": ("volume_20d_avg",),
+}
 
 
 def map_tw_symbol(market: Any, code: Any) -> str:
@@ -77,6 +98,13 @@ def _pct_from_closes(latest_close: Any, previous_close: Any) -> Optional[float]:
     return ((latest - previous) / previous) * 100
 
 
+def _first_present(row: Dict[str, Any], fields: Iterable[str]) -> Any:
+    for field in fields:
+        if field in row and row.get(field) is not None:
+            return row.get(field)
+    return None
+
+
 class TaiwanDailyDataBridgeFetcher(BaseFetcher):
     """Minimal read-only adapter for TW_Stock_Dashboard_Clean package/snapshot files."""
 
@@ -92,6 +120,104 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             return True
         return self._find_package_path() is not None or self._latest_snapshot_path() is not None
 
+    def get_quote_payload(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        record = self._lookup_snapshot_record(stock_code) or self._lookup_package_record(stock_code)
+        if record is None:
+            return None
+        latest = record.get("latest_bar") or record
+        close = _to_float(latest.get("close"))
+        if close is None:
+            return None
+        volume_shares = _to_float(latest.get("volumeShares", latest.get("volume_shares")))
+        volume_lots = _to_float(latest.get("volumeLots", latest.get("volume_lots")))
+        if volume_lots is None and volume_shares is not None:
+            volume_lots = volume_shares / 1000
+        exchange = record["symbol"].rsplit(".", 1)[-1]
+        return {
+            "symbol": record["symbol"],
+            "code": _base_code(record["symbol"]),
+            "name": str(record.get("name") or ""),
+            "market": record.get("exchange") or ("TWSE" if exchange == "TW" else "TPEX"),
+            "exchange": record.get("exchange") or ("TWSE" if exchange == "TW" else "TPEX"),
+            "trade_date": latest.get("date") or latest.get("trade_date") or record.get("trade_date"),
+            "open": _to_float(latest.get("open")),
+            "high": _to_float(latest.get("high")),
+            "low": _to_float(latest.get("low")),
+            "close": close,
+            "previous_close": _to_float(record.get("previous_close")),
+            "change": _to_float(record.get("change")),
+            "pct_chg": _to_float(record.get("pct_chg")),
+            "volume_shares": volume_shares,
+            "volume_lots": volume_lots,
+            "turnover_amount": _to_float(latest.get("amount", record.get("amount"))),
+            "transaction_count": safe_int(latest.get("transaction_count", latest.get("transactions"))),
+            "currency": "TWD",
+            "timezone": "Asia/Taipei",
+            "source": self.name,
+            "data_status": record.get("data_status") or "available",
+        }
+
+    def get_history_payload(self, stock_code: str, days: int = 30) -> Optional[Dict[str, Any]]:
+        record = self._lookup_package_record(stock_code)
+        status = "history_unavailable"
+        rows: List[Dict[str, Any]] = []
+        if record is not None and len(record.get("history") or []) > 1:
+            status = "available"
+            rows = record.get("history") or []
+        else:
+            snapshot = self._lookup_snapshot_record(stock_code)
+            if snapshot is None:
+                return None
+            status = "snapshot_only"
+            rows = snapshot.get("history") or []
+            record = snapshot
+
+        normalized = self._normalize_history_rows(rows)
+        if days > 0:
+            normalized = normalized[-days:]
+        return {
+            "stock_code": record["symbol"],
+            "stock_name": record.get("name"),
+            "period": "daily",
+            "source": self.name if status == "snapshot_only" else "latest_screening_package.chartSeries",
+            "data_status": status,
+            "data": normalized,
+        }
+
+    def get_technical_payload(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        record = self._lookup_package_record(stock_code)
+        if record is None:
+            if self._lookup_snapshot_record(stock_code) is not None:
+                quote = self.get_quote_payload(stock_code)
+                return {
+                    "stock_code": quote["symbol"] if quote else stock_code,
+                    "stock_name": quote.get("name") if quote else None,
+                    "trade_date": quote.get("trade_date") if quote else None,
+                    "source": "latest_screening_package.json",
+                    "availability": "technical_unavailable",
+                    "indicators": {key: None for key in _TECHNICAL_FIELD_ALIASES},
+                }
+            return None
+        latest = record.get("latest_bar") or {}
+        indicators = {
+            key: _to_float(_first_present(record.get("technical_source") or latest, aliases))
+            for key, aliases in _TECHNICAL_FIELD_ALIASES.items()
+        }
+        non_volume_keys = [key for key in indicators if not key.startswith("volume_")]
+        availability = (
+            "available"
+            if any(indicators.get(key) is not None for key in non_volume_keys)
+            else "technical_unavailable"
+        )
+        return {
+            "stock_code": record["symbol"],
+            "stock_name": record.get("name"),
+            "trade_date": latest.get("date") or latest.get("trade_date") or record.get("trade_date"),
+            "source": "latest_screening_package.json",
+            "availability": availability,
+            "indicators": indicators,
+        }
+
     def get_stock_name(self, stock_code: str) -> Optional[str]:
         record = self._lookup_record(stock_code)
         if record is None:
@@ -99,31 +225,29 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
         return str(record.get("name") or "").strip() or None
 
     def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
-        record = self._lookup_record(stock_code)
-        if record is None:
+        payload = self.get_quote_payload(stock_code)
+        if payload is None:
             return None
-        latest = record.get("latest_bar") or record
-        price = _to_float(latest.get("close"))
+        price = payload.get("close")
         if price is None:
             return None
-        previous_close = _to_float(record.get("previous_close"))
         return UnifiedRealtimeQuote(
-            code=record["symbol"],
-            name=str(record.get("name") or ""),
+            code=payload["symbol"],
+            name=str(payload.get("name") or ""),
             source=RealtimeSource.FALLBACK,
             market="tw",
             currency="TWD",
             data_quality="ok",
             price=price,
-            change_pct=record.get("pct_chg"),
-            change_amount=_to_float(record.get("change")),
-            volume=safe_int(latest.get("volumeShares", latest.get("volume_shares", latest.get("volume")))),
-            amount=_to_float(latest.get("amount", record.get("amount"))),
-            open_price=_to_float(latest.get("open")),
-            high=_to_float(latest.get("high")),
-            low=_to_float(latest.get("low")),
-            pre_close=previous_close,
-            provider_timestamp=str(latest.get("date") or latest.get("trade_date") or record.get("trade_date") or ""),
+            change_pct=payload.get("pct_chg"),
+            change_amount=payload.get("change"),
+            volume=safe_int(payload.get("volume_shares")),
+            amount=payload.get("turnover_amount"),
+            open_price=payload.get("open"),
+            high=payload.get("high"),
+            low=payload.get("low"),
+            pre_close=payload.get("previous_close"),
+            provider_timestamp=str(payload.get("trade_date") or ""),
         )
 
     def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -152,11 +276,17 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
         return normalized
 
     def _lookup_record(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        return self._lookup_package_record(stock_code) or self._lookup_snapshot_record(stock_code)
+
+    def _lookup_package_record(self, stock_code: str) -> Optional[Dict[str, Any]]:
         package_path = self._find_package_path()
         if package_path is not None:
             record = self._lookup_package(stock_code, package_path)
             if record is not None:
                 return record
+        return None
+
+    def _lookup_snapshot_record(self, stock_code: str) -> Optional[Dict[str, Any]]:
         snapshot_path = self._latest_snapshot_path()
         if snapshot_path is not None:
             return self._lookup_snapshot(stock_code, snapshot_path)
@@ -182,11 +312,21 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
         for csv_path in snapshot_root.glob("trade_date=*/daily_market_normalized.csv"):
             trade_date = csv_path.parent.name.split("trade_date=", 1)[-1]
             manifest = csv_path.with_name("snapshot_manifest.json")
-            if manifest.exists() and csv_path.stat().st_size > 0:
+            if self._is_retained_snapshot(csv_path, manifest):
                 valid.append((trade_date, csv_path))
         if not valid:
             return None
         return sorted(valid, key=lambda item: item[0])[-1][1]
+
+    def _is_retained_snapshot(self, csv_path: Path, manifest: Path) -> bool:
+        if not manifest.exists() or not csv_path.exists() or csv_path.stat().st_size <= 0:
+            return False
+        try:
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        status = str(payload.get("status") or payload.get("snapshot_status") or payload.get("state") or "").lower()
+        return status in _SNAPSHOT_ALLOWED_STATUSES
 
     def _lookup_package(self, stock_code: str, path: Path) -> Optional[Dict[str, Any]]:
         try:
@@ -260,9 +400,12 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             "history": history,
             "pct_chg": pct_chg,
             "pct_chg_source": pct_source,
-            "change": None,
+            "change": _to_float(candidate.get("change")),
             "previous_close": history[-2].get("close") if len(history) >= 2 else None,
             "amount": candidate.get("amount"),
+            "technical_source": candidate,
+            "exchange": candidate.get("market"),
+            "data_status": "available" if history else "partial",
         }
 
     def _record_from_series(self, series: Dict[str, Any], symbol: str) -> Dict[str, Any]:
@@ -280,6 +423,9 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             "change": None,
             "previous_close": history[-2].get("close") if len(history) >= 2 else None,
             "amount": latest_bar.get("amount"),
+            "technical_source": latest_bar,
+            "exchange": series.get("market"),
+            "data_status": "available" if history else "technical_unavailable",
         }
 
     def _candidate_pct(self, row: Dict[str, Any], history: List[Dict[str, Any]]) -> Tuple[Optional[float], str]:
@@ -345,7 +491,9 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             "low": row.get("low"),
             "close": row.get("close"),
             "volumeShares": row.get("volume_shares", row.get("volume")),
+            "volumeLots": _to_float(row.get("volume_lots")),
             "amount": row.get("amount", row.get("turnover")),
+            "transactions": row.get("transactions", row.get("transaction_count")),
         }
         return {
             "symbol": symbol,
@@ -355,9 +503,11 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             "history": [latest],
             "pct_chg": pct_chg,
             "pct_chg_source": pct_source,
-            "change": None,
+            "change": _to_float(row.get("change")),
             "previous_close": previous_close,
             "amount": latest.get("amount"),
+            "exchange": row.get("market"),
+            "data_status": "snapshot_only",
         }
 
     def _previous_snapshot_close(self, symbol: str, current_path: Path) -> Optional[float]:
@@ -369,7 +519,7 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             if trade_date >= current_trade_date:
                 continue
             manifest = csv_path.with_name("snapshot_manifest.json")
-            if manifest.exists() and csv_path.stat().st_size > 0:
+            if self._is_retained_snapshot(csv_path, manifest):
                 candidates.append((trade_date, csv_path))
         for _, csv_path in sorted(candidates, key=lambda item: item[0], reverse=True):
             try:
@@ -387,3 +537,35 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
                 if previous_symbol == symbol:
                     return _to_float(row.get("close"))
         return None
+
+    def _normalize_history_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        dedup: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            trade_date = str(row.get("date") or row.get("trade_date") or "").strip()
+            if not trade_date:
+                continue
+            item = {
+                "date": trade_date,
+                "open": _to_float(row.get("open")),
+                "high": _to_float(row.get("high")),
+                "low": _to_float(row.get("low")),
+                "close": _to_float(row.get("close")),
+                "volume": _to_float(row.get("volumeShares", row.get("volume_shares", row.get("volume")))),
+                "amount": _to_float(row.get("amount")),
+                "transaction_count": safe_int(row.get("transaction_count", row.get("transactions"))),
+                "ma5": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["ma5"])),
+                "ma10": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["ma10"])),
+                "ma20": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["ma20"])),
+                "ma60": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["ma60"])),
+                "bollinger_upper": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["bollinger_upper"])),
+                "bollinger_middle": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["bollinger_middle"])),
+                "bollinger_lower": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["bollinger_lower"])),
+                "kd_k": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["kd_k"])),
+                "kd_d": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["kd_d"])),
+                "macd_dif": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["macd_dif"])),
+                "macd_signal": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["macd_signal"])),
+                "macd_histogram": _to_float(_first_present(row, _TECHNICAL_FIELD_ALIASES["macd_histogram"])),
+            }
+            if all(item.get(field) is not None for field in ("open", "high", "low", "close")):
+                dedup[trade_date] = item
+        return [dedup[key] for key in sorted(dedup)]

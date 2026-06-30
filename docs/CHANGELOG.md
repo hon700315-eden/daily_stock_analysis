@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 修正台股日更数据转接层的 symbol smoke 参数兼容与正式 snapshot 连续交易日涨跌幅计算。
 - [新功能] 新增台股正式 snapshot 股票索引與搜尋 API，支援 `2330`、`2330.TW`、`TWSE:2330`、中文名稱搜尋與 TWSE/TPEX 普通股篩選。
 - [改進] 將正式預設市場切換為台灣，台股行情與 Portfolio 優先走 TaiwanDailyDataBridgeFetcher，且台股查無資料不再 fallback 到中國市場 provider。
+- [新功能] 接通台股正式 snapshot quote、package chartSeries history 與 package technical API，補齊 TWD、Asia/Taipei、股／張單位與資料狀態。
+- [測試] 補齊台股 retained snapshot 選擇、snapshot_only、技術指標缺值與 stocks quote/history/technical API 回歸測試。
 
 ## [3.24.1] - 2026-06-28
 

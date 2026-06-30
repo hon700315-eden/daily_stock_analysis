@@ -10,12 +10,18 @@
 """
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 from src.repositories.stock_repo import StockRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _is_taiwan_code(stock_code: str) -> bool:
+    value = (stock_code or "").strip().upper()
+    return bool(re.fullmatch(r"\d{4,6}(?:\.(?:TW|TWO))?", value))
 
 
 class StockService:
@@ -40,6 +46,33 @@ class StockService:
             实时行情数据字典
         """
         try:
+            if _is_taiwan_code(stock_code):
+                from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher
+
+                payload = TaiwanDailyDataBridgeFetcher().get_quote_payload(stock_code)
+                if payload is None:
+                    logger.warning("台股 %s 查無正式行情資料", stock_code)
+                    return None
+                return {
+                    "stock_code": payload["symbol"],
+                    "stock_name": payload.get("name"),
+                    "current_price": payload.get("close"),
+                    "change": payload.get("change"),
+                    "change_percent": payload.get("pct_chg"),
+                    "open": payload.get("open"),
+                    "high": payload.get("high"),
+                    "low": payload.get("low"),
+                    "prev_close": payload.get("previous_close"),
+                    "volume": payload.get("volume_shares"),
+                    "amount": payload.get("turnover_amount"),
+                    "update_time": payload.get("trade_date") or datetime.now().isoformat(),
+                    "market": "tw",
+                    "currency": payload.get("currency"),
+                    "provider": payload.get("source"),
+                    "source": payload.get("source"),
+                    **payload,
+                }
+
             # 调用数据获取器获取实时行情
             from data_provider.base import DataFetcherManager
             
@@ -123,6 +156,21 @@ class StockService:
             )
         
         try:
+            if _is_taiwan_code(stock_code):
+                from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher
+
+                payload = TaiwanDailyDataBridgeFetcher().get_history_payload(stock_code, days=days)
+                if payload is None:
+                    logger.warning("台股 %s 查無正式歷史資料", stock_code)
+                    return {
+                        "stock_code": stock_code,
+                        "period": period,
+                        "source": "TaiwanDailyDataBridgeFetcher",
+                        "data_status": "not_found",
+                        "data": [],
+                    }
+                return payload
+
             # 调用数据获取器获取历史数据
             from data_provider.base import DataFetcherManager
             
@@ -169,6 +217,25 @@ class StockService:
         except Exception as e:
             logger.error(f"获取历史数据失败: {e}", exc_info=True)
             return {"stock_code": stock_code, "period": period, "data": []}
+
+    def get_technical_data(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        """取得股票技術指標。台股優先讀正式 latest_screening_package.json。"""
+        if not _is_taiwan_code(stock_code):
+            return None
+        try:
+            from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher
+
+            return TaiwanDailyDataBridgeFetcher().get_technical_payload(stock_code)
+        except Exception as e:
+            logger.error("取得台股技術指標失敗: %s", e, exc_info=True)
+            return {
+                "stock_code": stock_code,
+                "stock_name": None,
+                "trade_date": None,
+                "source": "latest_screening_package.json",
+                "availability": "source_unavailable",
+                "indicators": {},
+            }
     
     def _get_placeholder_quote(self, stock_code: str) -> Dict[str, Any]:
         """

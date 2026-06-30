@@ -27,6 +27,7 @@ from api.v1.schemas.stocks import (
     StockQuote,
     StockSearchItem,
     StockSearchResponse,
+    StockTechnicalResponse,
 )
 from api.v1.schemas.history import WatchlistRequest, WatchlistResponse
 from api.v1.schemas.common import ErrorResponse
@@ -510,6 +511,19 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             currency=result.get("currency"),
             provider=result.get("provider"),
             source=result.get("source"),
+            symbol=result.get("symbol"),
+            code=result.get("code"),
+            exchange=result.get("exchange"),
+            trade_date=result.get("trade_date"),
+            previous_close=result.get("previous_close", result.get("prev_close")),
+            close=result.get("close", result.get("current_price")),
+            pct_chg=result.get("pct_chg", result.get("change_percent")),
+            volume_shares=result.get("volume_shares", result.get("volume")),
+            volume_lots=result.get("volume_lots"),
+            turnover_amount=result.get("turnover_amount", result.get("amount")),
+            transaction_count=result.get("transaction_count"),
+            data_status=result.get("data_status"),
+            timezone=result.get("timezone"),
         )
         
     except HTTPException:
@@ -574,16 +588,31 @@ def get_stock_history(
                 close=item.get("close"),
                 volume=item.get("volume"),
                 amount=item.get("amount"),
-                change_percent=item.get("change_percent")
+                change_percent=item.get("change_percent"),
+                transaction_count=item.get("transaction_count"),
+                ma5=item.get("ma5"),
+                ma10=item.get("ma10"),
+                ma20=item.get("ma20"),
+                ma60=item.get("ma60"),
+                bollinger_upper=item.get("bollinger_upper"),
+                bollinger_middle=item.get("bollinger_middle"),
+                bollinger_lower=item.get("bollinger_lower"),
+                kd_k=item.get("kd_k"),
+                kd_d=item.get("kd_d"),
+                macd_dif=item.get("macd_dif"),
+                macd_signal=item.get("macd_signal"),
+                macd_histogram=item.get("macd_histogram"),
             )
             for item in result.get("data", [])
         ]
         
         return StockHistoryResponse(
-            stock_code=stock_code,
+            stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
             period=period,
-            data=data
+            data=data,
+            source=result.get("source"),
+            data_status=result.get("data_status"),
         )
     
     except ValueError as e:
@@ -603,4 +632,45 @@ def get_stock_history(
                 "error": "internal_error",
                 "message": f"获取历史行情失败: {str(e)}"
             }
+        )
+
+
+@router.get(
+    "/{stock_code}/technical",
+    response_model=StockTechnicalResponse,
+    responses={
+        200: {"description": "技術指標資料"},
+        404: {"description": "股票不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="取得股票技術指標",
+    description="取得指定股票的正式技術指標；台股讀取 latest_screening_package.json。",
+)
+def get_stock_technical(stock_code: str) -> StockTechnicalResponse:
+    try:
+        service = StockService()
+        result = service.get_technical_data(stock_code)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"未找到股票 {stock_code} 的技術指標資料",
+                },
+            )
+        return StockTechnicalResponse(
+            stock_code=result.get("stock_code", stock_code),
+            stock_name=result.get("stock_name"),
+            trade_date=result.get("trade_date"),
+            source=result.get("source"),
+            availability=result.get("availability", "technical_unavailable"),
+            indicators=result.get("indicators") or {},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("取得技術指標失敗: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "internal_error", "message": f"取得技術指標失敗: {str(e)}"},
         )
