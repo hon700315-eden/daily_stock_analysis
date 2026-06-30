@@ -23,9 +23,19 @@ _PACKAGE_PCT_FIELDS = ("pct_chg", "change_pct", "changePercent", "change_pct_val
 
 
 def map_tw_symbol(market: Any, code: Any) -> str:
-    """Map explicit TWSE/TPEX market rows to Yahoo suffix symbols."""
-    market_text = str(market or "").strip().upper()
-    code_text = str(code or "").strip().upper()
+    """Map explicit TWSE/TPEX market rows to Yahoo suffix symbols.
+
+    The original bridge call sites pass ``(market, code)``. Keep that order
+    while also accepting ``(code, market)`` for external smoke checks.
+    """
+    first = str(market or "").strip().upper()
+    second = str(code or "").strip().upper()
+    if first in {"TWSE", "TPEX"}:
+        market_text, code_text = first, second
+    elif second in {"TWSE", "TPEX"}:
+        market_text, code_text = second, first
+    else:
+        market_text, code_text = first, second
     if not code_text:
         raise ValueError("Taiwan stock code is empty")
     if code_text.endswith((".TW", ".TWO")):
@@ -322,6 +332,9 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
         if len({symbol for symbol, _ in matches}) > 1:
             raise DataFetchError(f"Ambiguous Taiwan stock code: {stock_code}")
         symbol, row = matches[0]
+        previous_close = self._previous_snapshot_close(symbol, path)
+        pct_chg = _pct_from_closes(row.get("close"), previous_close)
+        pct_source = "snapshot.close" if pct_chg is not None else "unavailable_no_previous_close"
         latest = {
             "date": row.get("trade_date"),
             "open": row.get("open"),
@@ -337,9 +350,37 @@ class TaiwanDailyDataBridgeFetcher(BaseFetcher):
             "trade_date": row.get("trade_date"),
             "latest_bar": latest,
             "history": [latest],
-            "pct_chg": None,
-            "pct_chg_source": "missing_previous_close",
+            "pct_chg": pct_chg,
+            "pct_chg_source": pct_source,
             "change": None,
-            "previous_close": None,
+            "previous_close": previous_close,
             "amount": latest.get("amount"),
         }
+
+    def _previous_snapshot_close(self, symbol: str, current_path: Path) -> Optional[float]:
+        snapshot_root = current_path.parent.parent
+        current_trade_date = current_path.parent.name.split("trade_date=", 1)[-1]
+        candidates: List[Tuple[str, Path]] = []
+        for csv_path in snapshot_root.glob("trade_date=*/daily_market_normalized.csv"):
+            trade_date = csv_path.parent.name.split("trade_date=", 1)[-1]
+            if trade_date >= current_trade_date:
+                continue
+            manifest = csv_path.with_name("snapshot_manifest.json")
+            if manifest.exists() and csv_path.stat().st_size > 0:
+                candidates.append((trade_date, csv_path))
+        for _, csv_path in sorted(candidates, key=lambda item: item[0], reverse=True):
+            try:
+                df = pd.read_csv(csv_path, dtype={"code": str}, encoding="utf-8-sig")
+            except Exception:
+                continue
+            df.columns = [str(col).lstrip("\ufeff") for col in df.columns]
+            if not {"market", "code", "close"}.issubset(df.columns):
+                continue
+            for _, row in df.iterrows():
+                try:
+                    previous_symbol = map_tw_symbol(row.get("market"), row.get("code"))
+                except ValueError:
+                    continue
+                if previous_symbol == symbol:
+                    return _to_float(row.get("close"))
+        return None

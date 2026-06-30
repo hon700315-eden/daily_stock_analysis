@@ -76,6 +76,8 @@ def test_map_tw_symbol_requires_explicit_market() -> None:
     assert map_tw_symbol("TPEX", "6488") == "6488.TWO"
     assert map_tw_symbol("TWSE", "2330.TW") == "2330.TW"
     assert map_tw_symbol("TPEX", "6488.TWO") == "6488.TWO"
+    assert map_tw_symbol("2330", "TWSE") == "2330.TW"
+    assert map_tw_symbol("6488", "TPEX") == "6488.TWO"
     with pytest.raises(ValueError):
         map_tw_symbol("UNKNOWN", "2330")
 
@@ -167,6 +169,31 @@ def test_snapshot_reads_twse_tpex_and_preserves_volume_shares_unit(tmp_path) -> 
     assert tw_quote is not None and tw_quote.volume == 12000
     assert two_quote is not None and two_quote.volume == 22000
     assert tw_quote.change_pct is None
+
+
+def test_snapshot_computes_pct_from_previous_trade_date_close(tmp_path) -> None:
+    previous_dir = tmp_path / "01_market_data/daily_snapshot/trade_date=2026-06-26"
+    latest_dir = tmp_path / "01_market_data/daily_snapshot/trade_date=2026-06-29"
+    previous_dir.mkdir(parents=True)
+    latest_dir.mkdir(parents=True)
+    (previous_dir / "snapshot_manifest.json").write_text('{"status":"success"}', encoding="utf-8")
+    (latest_dir / "snapshot_manifest.json").write_text('{"status":"success"}', encoding="utf-8")
+    (previous_dir / "daily_market_normalized.csv").write_text(
+        "trade_date,market,code,name,open,high,low,close,change,volume_shares,turnover\n"
+        "2026-06-26,TWSE,2330,台積電,100,105,99,100,1,10000,1000000\n",
+        encoding="utf-8",
+    )
+    (latest_dir / "daily_market_normalized.csv").write_text(
+        "trade_date,market,code,name,open,high,low,close,change,volume_shares,turnover\n"
+        "2026-06-29,TWSE,2330,台積電,106,111,105,110,9,12000,1320000\n",
+        encoding="utf-8",
+    )
+    fetcher = TaiwanDailyDataBridgeFetcher(tmp_path)
+
+    quote = fetcher.get_realtime_quote("2330.TW")
+    assert quote is not None
+    assert quote.change_pct == 10.0
+    assert quote.change_amount is None
 
 
 def test_snapshot_rejects_missing_required_columns(tmp_path) -> None:

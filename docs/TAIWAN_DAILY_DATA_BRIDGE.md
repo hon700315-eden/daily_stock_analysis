@@ -37,6 +37,10 @@ not guessed. Bare codes such as `2330` are resolved only when the existing
 package or snapshot contains exactly one matching market/code row; ambiguous
 matches fail clearly.
 
+The public helper accepts both `(market, code)` and `(code, market)` argument
+orders so external smoke checks can verify the same explicit mapping without
+changing the bridge's internal row-reading call sites.
+
 ## `pct_chg`
 
 `pct_chg` is a percentage-point number, matching the existing
@@ -48,7 +52,9 @@ Source priority:
    `changePercent`, `change_pct_value`
 2. Latest two `chartSeries` closes:
    `((latest_close - previous_close) / previous_close) * 100`
-3. `None` when previous close is missing, zero, or invalid
+3. For snapshot fallback, latest close and the previous valid snapshot close:
+   `((latest_close - previous_close) / previous_close) * 100`
+4. `None` when previous close is missing, zero, or invalid
 
 The upstream snapshot `change` field is a price delta and is not used as
 `pct_chg`.
