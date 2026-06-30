@@ -617,6 +617,7 @@ class DataFetcherManager:
         "AkshareFetcher": {"cn", "hk"},
         "TushareFetcher": {"cn", "hk"},
         "TickFlowFetcher": {"cn"},
+        "TaiwanDailyDataBridgeFetcher": {"tw"},
         "PytdxFetcher": {"cn"},
         "BaostockFetcher": {"cn"},
         "YfinanceFetcher": {"cn", "hk", "us", "jp", "kr", "tw"},
@@ -1156,6 +1157,7 @@ class DataFetcherManager:
         from .akshare_fetcher import AkshareFetcher
         from .tushare_fetcher import TushareFetcher
         from .tickflow_fetcher import TickFlowFetcher
+        from .taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher
         from .pytdx_fetcher import PytdxFetcher
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
@@ -1165,6 +1167,7 @@ class DataFetcherManager:
         efinance = EfinanceFetcher()
         tencent = TencentFetcher()
         akshare = AkshareFetcher()
+        taiwan_daily_bridge = TaiwanDailyDataBridgeFetcher()
         pytdx = PytdxFetcher()      # 通达信数据源（可配 PYTDX_HOST/PYTDX_PORT）
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
@@ -1216,6 +1219,7 @@ class DataFetcherManager:
                 efinance,
                 tencent,
                 akshare,
+                taiwan_daily_bridge,
                 pytdx,
                 baostock,
                 yfinance,
@@ -1275,6 +1279,34 @@ class DataFetcherManager:
         fetchers = self._get_fetchers_snapshot()
         errors = []
         request_start = time.time()
+
+        if "." not in stock_code and stock_code.isdigit() and len(stock_code) == 4:
+            tw_bridge = self._get_fetcher_by_name("TaiwanDailyDataBridgeFetcher", capability="daily_data")
+            if tw_bridge is not None:
+                attempt_start = time.time()
+                try:
+                    df = self._call_fetcher_method(
+                        tw_bridge,
+                        "get_daily_data",
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        days=days,
+                    )
+                    if df is not None and not df.empty:
+                        record_provider_run(
+                            data_type="daily_data",
+                            provider=tw_bridge.name,
+                            operation="get_daily_data",
+                            success=True,
+                            latency_ms=int((time.time() - attempt_start) * 1000),
+                            record_count=len(df),
+                        )
+                        return df, tw_bridge.name
+                except DataFetchError:
+                    raise
+                except Exception as exc:
+                    logger.debug("[台股日更转接] 裸代码 %s 未命中: %s", stock_code, exc)
 
         # 快速路径：美股使用专用数据源路由；港股先过滤不支持港股日线的数据源
         #   - 配置长桥凭据后: Longbridge 为首选, YFinance/AkShare 兜底
@@ -1765,8 +1797,25 @@ class DataFetcherManager:
         is_kr = (not is_us) and (not is_hk) and _is_kr_market(stock_code)
         is_tw = (not is_us) and (not is_hk) and _is_tw_market(stock_code)
 
+        if "." not in stock_code and stock_code.isdigit() and len(stock_code) == 4:
+            quote = self._try_fetcher_quote(stock_code, "TaiwanDailyDataBridgeFetcher")
+            if quote is not None:
+                logger.info("[实时行情] 台股裸代码 %s 由 TaiwanDailyDataBridgeFetcher 唯一辨识", stock_code)
+                return self._enrich_realtime_quote(
+                    quote,
+                    realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
+                )
+
         if is_jp or is_kr or is_tw:
             market_label = "日股" if is_jp else "韩股" if is_kr else "台股"
+            if is_tw:
+                quote = self._try_fetcher_quote(stock_code, "TaiwanDailyDataBridgeFetcher")
+                if quote is not None:
+                    logger.info(f"[实时行情] {market_label} {stock_code} 成功获取 (来源: TaiwanDailyDataBridgeFetcher)")
+                    return self._enrich_realtime_quote(
+                        quote,
+                        realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
+                    )
             quote = self._try_fetcher_quote(stock_code, "YfinanceFetcher")
             if quote is not None:
                 logger.info(f"[实时行情] {market_label} {stock_code} 成功获取 (来源: YfinanceFetcher)")
@@ -2262,6 +2311,18 @@ class DataFetcherManager:
         index_name = get_index_stock_name(stock_code)
         if is_meaningful_stock_name(index_name, stock_code):
             return self._cache_stock_name(stock_code, index_name) or index_name
+
+        if "." not in stock_code and stock_code.isdigit() and len(stock_code) == 4:
+            bridge = self._get_fetcher_by_name("TaiwanDailyDataBridgeFetcher", capability="stock_name")
+            if bridge is not None and hasattr(bridge, "get_stock_name"):
+                try:
+                    name = self._call_fetcher_method(bridge, "get_stock_name", stock_code)
+                    if is_meaningful_stock_name(name, stock_code):
+                        return self._cache_stock_name(stock_code, name) or name
+                except DataFetchError:
+                    raise
+                except Exception as exc:
+                    logger.debug("[股票名称] 台股日更转接未命中 %s: %s", stock_code, exc)
 
         # 2. 尝试从实时行情中获取（最快，可按需禁用）
         if allow_realtime:
