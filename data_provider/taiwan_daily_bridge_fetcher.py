@@ -13,7 +13,10 @@ import pandas as pd
 from .base import BaseFetcher, DataFetchError
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 
-_DEFAULT_SOURCE_ROOT = Path("/Users/youjunhong/Documents/Codex/TW_Stock_Dashboard_Clean")
+_DEFAULT_SOURCE_ROOT = Path(
+    "/Users/youjunhong/Library/CloudStorage/GoogleDrive-hon700315@gmail.com/"
+    "我的雲端硬碟/TW_Stock_Data_Drive"
+)
 _PACKAGE_CANDIDATES = (
     Path("06_dashboard_sync/latest_screening_package.json"),
     Path("dashboard-app/public/dashboard-data/latest_screening_package.json"),

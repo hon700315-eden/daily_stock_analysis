@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 修复 Web 首页个股栏在 stock-bar 摘要字段缺失或动作建议无法归类时隐藏情绪分与建议标识的问题。
 - [新功能] 新增只读台股日更数据转接层，复用既有 TW_Stock_Dashboard_Clean package/snapshot 并映射 `.TW`/`.TWO` 行情。
 - [修复] 修正台股日更数据转接层的 symbol smoke 参数兼容与正式 snapshot 连续交易日涨跌幅计算。
+- [新功能] 新增台股正式 snapshot 股票索引與搜尋 API，支援 `2330`、`2330.TW`、`TWSE:2330`、中文名稱搜尋與 TWSE/TPEX 普通股篩選。
 
 ## [3.24.1] - 2026-06-28
 

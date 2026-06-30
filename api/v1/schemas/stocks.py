@@ -106,3 +106,23 @@ class StockHistoryResponse(BaseModel):
             "data": []
         }
     })
+
+
+class StockSearchItem(BaseModel):
+    """單筆股票搜尋結果"""
+
+    code: str = Field(..., description="不含 suffix 的股票代碼")
+    symbol: str = Field(..., description="可直接交給 quote endpoint 的正式代碼")
+    name: str = Field(..., description="正式名稱")
+    market: str = Field(..., description="市場代碼，例如 tw")
+    exchange: str = Field(..., description="交易所，例如 TWSE 或 TPEX")
+    security_type: str = Field(..., description="商品類型")
+    is_common_stock: bool = Field(..., description="是否為上市／上櫃普通股")
+
+
+class StockSearchResponse(BaseModel):
+    """股票搜尋回應"""
+
+    query: str = Field(..., description="原始查詢字串")
+    count: int = Field(..., description="結果筆數")
+    items: List[StockSearchItem] = Field(default_factory=list, description="搜尋結果")

@@ -1236,6 +1236,11 @@ class PortfolioService:
 
     @staticmethod
     def _normalize_symbol_for_storage(symbol: str) -> str:
+        from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+        tw_symbol = resolve_taiwan_stock_symbol(symbol)
+        if tw_symbol is not None:
+            return tw_symbol
         return canonical_stock_code(symbol)
 
     @staticmethod
@@ -1244,6 +1249,11 @@ class PortfolioService:
             return ""
 
         raw = canonical_stock_code(symbol)
+        from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+        tw_symbol = resolve_taiwan_stock_symbol(symbol)
+        if tw_symbol is not None:
+            return tw_symbol
         if len(raw) >= 8 and raw[:2] in {"SH", "SZ", "BJ"} and raw[2:].isdigit():
             return raw
 
@@ -1266,6 +1276,12 @@ class PortfolioService:
         raw = canonical_stock_code(symbol)
         if not raw:
             return ""
+
+        from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+        tw_symbol = resolve_taiwan_stock_symbol(symbol)
+        if tw_symbol is not None:
+            return tw_symbol
 
         if len(raw) >= 8 and raw[:2] in {"SH", "SZ", "BJ"} and raw[2:].isdigit():
             return raw
@@ -1305,6 +1321,11 @@ class PortfolioService:
                 _add(f"HK{legacy_hk_digits}")
                 _add(f"{hk_digits}.HK")
                 _add(f"{legacy_hk_digits}.HK")
+            return values
+
+        if normalized.endswith((".TW", ".TWO")):
+            base, _suffix = normalized.rsplit(".", 1)
+            _add(base)
             return values
 
         explicit_exchange: Optional[str] = None

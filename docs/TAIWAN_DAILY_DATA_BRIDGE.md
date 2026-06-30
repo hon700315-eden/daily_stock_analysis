@@ -1,7 +1,7 @@
 # Taiwan Daily Data Bridge
 
-This bridge lets `daily_stock_analysis` read the existing
-`TW_Stock_Dashboard_Clean` daily outputs without changing that upstream system.
+This bridge lets `daily_stock_analysis` read retained Taiwan daily snapshots and
+the existing dashboard package without changing either upstream system.
 
 ## Data Products
 
@@ -17,13 +17,13 @@ directories are ignored.
 
 ## Configuration
 
-`TW_STOCK_DATA_ROOT` is optional. It can point to the synchronized
-`TW_Stock_Dashboard_Clean` root, a Drive root with the same contracts, or a
-single `latest_screening_package.json` file.
+`TW_STOCK_DATA_ROOT` is optional. It can point to the official Drive root, the
+synchronized `TW_Stock_Dashboard_Clean` root, or a single
+`latest_screening_package.json` file.
 
 When unset, the bridge checks:
 
-`/Users/youjunhong/Documents/Codex/TW_Stock_Dashboard_Clean`
+`/Users/youjunhong/Library/CloudStorage/GoogleDrive-hon700315@gmail.com/我的雲端硬碟/TW_Stock_Data_Drive`
 
 ## Symbol Mapping
 
@@ -40,6 +40,49 @@ matches fail clearly.
 The public helper accepts both `(market, code)` and `(code, market)` argument
 orders so external smoke checks can verify the same explicit mapping without
 changing the bridge's internal row-reading call sites.
+
+## Taiwan Stock Search
+
+`GET /api/v1/stocks/search?q=2330` uses the latest retained official snapshot:
+
+`01_market_data/daily_snapshot/trade_date=YYYY-MM-DD/daily_market_normalized.csv`
+
+The loader automatically selects the newest valid retained snapshot that has
+both `daily_market_normalized.csv` and `snapshot_manifest.json`; no trade date is
+hard-coded.
+
+Supported query forms:
+
+- `2330`, `2330.TW`, `TWSE:2330`, `台積電`
+- `6488`, `6488.TWO`, `TPEX:6488`, `環球晶`
+- exact Chinese name and partial Chinese name search
+
+Default results include only TWSE/TPEX common stocks and return:
+
+- `code`
+- `symbol`
+- `name`
+- `market`
+- `exchange`
+- `security_type`
+- `is_common_stock`
+
+`symbol` is the value that can be passed directly to
+`GET /api/v1/stocks/{stock_code}/quote`.
+
+The official snapshot currently provides `market`, `code`, and `name`, but does
+not provide a dedicated security-type column. Common-stock detection therefore
+uses the official TWSE/TPEX market rows first, then a conservative fallback to
+exclude non-common-stock products. The fallback excludes ETF, ETN, warrants,
+bull/bear products, bonds, convertible bonds, preferred shares, depositary
+receipts, beneficiary securities, index products, leveraged/inverse products,
+futures-style products, REIT-like products, and other special instruments when
+the code or official name indicates that type.
+
+The default API response does not silently fall back to China stock lookup. A
+missing Taiwan query returns an empty `items` list. Internal callers may set
+`include_excluded=true` to inspect excluded products, but the default analysis
+flow only admits TWSE/TPEX common stocks.
 
 ## `pct_chg`
 

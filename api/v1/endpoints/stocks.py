@@ -25,6 +25,8 @@ from api.v1.schemas.stocks import (
     KLineData,
     StockHistoryResponse,
     StockQuote,
+    StockSearchItem,
+    StockSearchResponse,
 )
 from api.v1.schemas.history import WatchlistRequest, WatchlistResponse
 from api.v1.schemas.common import ErrorResponse
@@ -40,6 +42,7 @@ from src.services.import_parser import (
 )
 from src.services.stock_service import StockService
 from src.services.system_config_service import SystemConfigService
+from src.data.taiwan_stock_index import search_taiwan_stocks
 from data_provider.base import normalize_stock_code
 
 logger = logging.getLogger(__name__)
@@ -76,8 +79,11 @@ def _write_watchlist_codes(service: SystemConfigService, codes: list) -> None:
 # Stock code validation patterns (aligned with frontend validateStockCode)
 _STOCK_CODE_RE = re.compile(
     r"^(?:\d{6}"                              # A-share 6-digit
+    r"|\d{4}"                                  # Taiwan bare common stock code
     r"|(?:SH|SZ|BJ)\d{6}"                     # exchange-prefixed A-share
+    r"|(?:TWSE|TPEX):\d{4,6}"                 # Taiwan exchange-prefixed code
     r"|\d{6}\.(?:SH|SZ|SS|BJ)"                # exchange-suffixed A-share
+    r"|\d{4,6}\.(?:TW|TWO)"                   # Taiwan Yahoo suffix format
     r"|\d{1,5}\.HK"                           # HK suffix format
     r"|HK\d{1,5}"                             # HK prefix format
     r"|\d{5}"                                 # bare 5-digit HK code
@@ -310,6 +316,48 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
     ]
     codes = list(dict.fromkeys(i.code for i in extract_items if i.code))
     return ExtractFromImageResponse(codes=codes, items=extract_items, raw_text=None)
+
+
+@router.get(
+    "/search",
+    response_model=StockSearchResponse,
+    responses={
+        200: {"description": "股票搜尋結果"},
+        400: {"description": "查詢參數錯誤", "model": ErrorResponse},
+    },
+    summary="搜尋股票",
+    description="搜尋正式股票索引；台股預設只回傳上市／上櫃普通股。",
+)
+def search_stocks(
+    q: str = Query(..., min_length=1, description="股票代碼、正式 suffix 代碼或中文名稱"),
+    limit: int = Query(20, ge=1, le=50, description="最大結果筆數"),
+    include_excluded: bool = Query(False, description="是否包含 ETF、ETN、權證與其他特殊商品"),
+) -> StockSearchResponse:
+    query = q.strip()
+    if not query:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_query", "message": "查詢字串不可為空"},
+        )
+
+    records = search_taiwan_stocks(
+        query,
+        limit=limit,
+        include_excluded=include_excluded,
+    )
+    items = [
+        StockSearchItem(
+            code=record.code,
+            symbol=record.symbol,
+            name=record.name,
+            market=record.market,
+            exchange=record.exchange,
+            security_type=record.security_type,
+            is_common_stock=record.is_common_stock,
+        )
+        for record in records
+    ]
+    return StockSearchResponse(query=q, count=len(items), items=items)
 
 
 @router.get(

@@ -95,6 +95,14 @@ def is_code_like(value: str) -> bool:
     text = value.strip().upper()
     if not text:
         return False
+    if len(text) == 4 and text.isdigit():
+        from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+        return resolve_taiwan_stock_symbol(text) is not None
+    if text.startswith(("TWSE:", "TPEX:")):
+        from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+        return resolve_taiwan_stock_symbol(text) is not None
     if text.isdigit() and len(text) in (5, 6):
         return True
     if _strip_exchange_suffix(text) is not None:
@@ -119,6 +127,11 @@ def normalize_code(raw: str) -> Optional[str]:
     text = raw.strip().upper()
     if not text:
         return None
+    from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+    tw_symbol = resolve_taiwan_stock_symbol(text)
+    if tw_symbol is not None:
+        return tw_symbol
     if text.isdigit() and len(text) in (5, 6):
         return text
     suffix_symbol = normalize_suffix_market_symbol(text)
@@ -152,6 +165,12 @@ def resolve_index_stock_code_for_analysis(raw: str) -> str:
     text = (raw or "").strip()
     if not text:
         return ""
+
+    from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+    tw_symbol = resolve_taiwan_stock_symbol(text)
+    if tw_symbol is not None:
+        return tw_symbol
 
     if is_code_like(text) or (text.isdigit() and len(text) == 4):
         from src.data.stock_index_loader import resolve_index_stock_code

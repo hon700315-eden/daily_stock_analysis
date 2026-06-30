@@ -97,6 +97,15 @@ def normalize_stock_code(stock_code: str) -> str:
     code = stock_code.strip()
     upper = code.upper()
 
+    try:
+        from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+        tw_symbol = resolve_taiwan_stock_symbol(upper)
+        if tw_symbol is not None:
+            return tw_symbol
+    except Exception:
+        pass
+
     # Normalize HK prefix to a canonical 5-digit form (e.g. hk1810 -> HK01810)
     if upper.startswith('HK') and not upper.startswith('HK.'):
         candidate = upper[2:]

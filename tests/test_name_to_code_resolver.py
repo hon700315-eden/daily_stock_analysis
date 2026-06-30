@@ -51,10 +51,15 @@ class TestIsCodeLike:
 
     def test_rejects_non_code(self):
         assert _is_code_like("贵州茅台") is False
-        assert _is_code_like("1234") is False  # too short
+        with patch("src.data.taiwan_stock_index.resolve_taiwan_stock_symbol", return_value=None):
+            assert _is_code_like("9999") is False
         assert _is_code_like("1234567") is False  # too long
         assert _is_code_like("") is False
         assert _is_code_like("   ") is False
+
+    def test_accepts_indexed_taiwan_bare_code(self):
+        with patch("src.data.taiwan_stock_index.resolve_taiwan_stock_symbol", return_value="2330.TW"):
+            assert _is_code_like("2330") is True
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +89,13 @@ class TestNormalizeCode:
 
     def test_returns_none_for_invalid(self):
         assert _normalize_code("") is None
-        assert _normalize_code("1234") is None
+        with patch("src.data.taiwan_stock_index.resolve_taiwan_stock_symbol", return_value=None):
+            assert _normalize_code("9999") is None
         assert _normalize_code("贵州茅台") is None
+
+    def test_normalizes_indexed_taiwan_bare_code(self):
+        with patch("src.data.taiwan_stock_index.resolve_taiwan_stock_symbol", return_value="2330.TW"):
+            assert _normalize_code("2330") == "2330.TW"
 
 
 # ---------------------------------------------------------------------------
