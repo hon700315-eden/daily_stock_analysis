@@ -147,12 +147,14 @@ def _classify_security(code: str, name: str) -> tuple[str, bool]:
         return "etf", False
 
     if not code_upper.isdigit() or len(code_upper) != 4:
+        if "債" in name_upper or "公司債" in name_upper:
+            return "bond", False
         if code_upper.startswith("02") or name_upper.endswith("N"):
             return "etn", False
-        if code_upper.endswith(("A", "B", "C")) or "特別股" in name_upper:
-            return "preferred_stock", False
         if code_upper.startswith("00"):
             return "etf", False
+        if code_upper.endswith(("A", "B", "C")) or "特別股" in name_upper:
+            return "preferred_stock", False
         return "special_instrument", False
 
     if "-DR" in name_upper or name_upper.endswith("DR"):

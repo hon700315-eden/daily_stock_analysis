@@ -34,6 +34,7 @@ def _write_snapshot(root: Path) -> Path:
                 "2026-06-29,TWSE,0050,元大台灣50,103.35,105.35,103.30,104.45,1.35,106661221,11134777810,101519,twse,success",
                 "2026-06-29,TPEX,700019,宏捷科統一5C購01,1,1.1,0.9,1.0,0,1000,1000,1,tpex,success",
                 "2026-06-29,TWSE,2881A,富邦特,63.70,63.80,63.60,63.80,0.10,80295,5117499,40,twse,success",
+                "2026-06-29,TWSE,00710B,復華彭博非投等債,18,18.1,17.9,18,0,1000,18000,1,twse,success",
                 "2026-06-29,TWSE,020000,富邦特選蘋果N,,,,,0,0,0,0,twse,success",
                 "2026-06-29,TWSE,9105,泰金寶-DR,9.32,9.51,9.20,9.33,0.01,30095251,281550084,7816,twse,success",
             ]
@@ -71,6 +72,7 @@ def test_search_defaults_to_common_stocks_and_can_include_excluded(taiwan_snapsh
     assert search_taiwan_stocks("0050") == []
     assert search_taiwan_stocks("700019") == []
     assert search_taiwan_stocks("2881A") == []
+    assert search_taiwan_stocks("00710B") == []
     assert search_taiwan_stocks("020000") == []
     assert search_taiwan_stocks("9105") == []
     assert search_taiwan_stocks("9999") == []
@@ -79,14 +81,17 @@ def test_search_defaults_to_common_stocks_and_can_include_excluded(taiwan_snapsh
     assert search_taiwan_stocks("2945")[0].symbol == "2945.TW"
     warrant = search_taiwan_stocks("700019", include_excluded=True)[0]
     preferred = search_taiwan_stocks("2881A", include_excluded=True)[0]
+    bond = search_taiwan_stocks("00710B", include_excluded=True)[0]
     etn = search_taiwan_stocks("020000", include_excluded=True)[0]
     assert etf.security_type == "etf"
     assert warrant.security_type == "special_instrument"
     assert preferred.security_type == "preferred_stock"
+    assert bond.security_type == "bond"
     assert etn.security_type == "etn"
     assert not etf.is_common_stock
     assert not warrant.is_common_stock
     assert not preferred.is_common_stock
+    assert not bond.is_common_stock
     assert not etn.is_common_stock
 
 
