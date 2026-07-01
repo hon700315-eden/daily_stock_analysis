@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 - [修復] 修正股票行情 API 缺值補零與 `.env.example` 大盤復盤市場範例不一致問題。
+- [測試] 新增台股日更正式資料只讀 readback smoke，驗證 manifest、package、TWSE/TPEX、行情、history、technical 與缺碼不 fallback 中國市場。
+- [修復] 修正既有 network smoke 與 Docker health check 吞掉失敗後仍成功的問題。
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
