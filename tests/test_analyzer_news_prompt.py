@@ -176,8 +176,36 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         self.assertIn("每一條都必須帶具體日期（YYYY-MM-DD）", prompt)
         self.assertIn("超出近7日窗口的新聞一律忽略", prompt)
         self.assertIn("時間未知、無法確定發布日期的新聞一律忽略", prompt)
-        self.assertIn("财报与分红（价值投资口径）", prompt)
-        self.assertIn("禁止编造", prompt)
+        self.assertIn("財報與股利（價值投資口徑）", prompt)
+        self.assertIn("禁止編造", prompt)
+
+    def test_台股無結構化財報時不渲染財報表格(self) -> None:
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        context = {
+            "code": "2330.TW",
+            "stock_name": "台積電",
+            "date": "2026-07-01",
+            "today": {},
+            "news_window_days": 3,
+            "fundamental_context": {
+                "market": "tw",
+                "status": "not_supported",
+                "earnings": {"status": "not_supported", "data": {}},
+            },
+        }
+
+        prompt = analyzer._format_prompt(
+            context,
+            "台積電",
+            news_context="2026-07-01 台積電公布月營收。",
+        )
+
+        self.assertNotIn("財報與股利（價值投資口徑）", prompt)
+        self.assertNotIn("最近報告期", prompt)
+        self.assertIn("搜尋摘要中的數字只可視為外部網頁線索", prompt)
+        self.assertIn("不得當成已驗證財務資料", prompt)
 
     def test_taiwan_prompt_uses_taiwan_news_and_currency_context(self) -> None:
         """台股 prompt 不得回落到中國市場新聞或人民幣語境。"""

@@ -3624,7 +3624,15 @@ class GeminiAnalyzer:
             if isinstance(earnings_data, dict)
             else {}
         )
-        if isinstance(financial_report, dict) or isinstance(dividend_metrics, dict):
+        has_financial_report = (
+            isinstance(financial_report, dict)
+            and any(value is not None for value in financial_report.values())
+        )
+        has_dividend_metrics = (
+            isinstance(dividend_metrics, dict)
+            and any(value is not None for value in dividend_metrics.values())
+        )
+        if has_financial_report or has_dividend_metrics:
             financial_report = financial_report if isinstance(financial_report, dict) else {}
             dividend_metrics = dividend_metrics if isinstance(dividend_metrics, dict) else {}
             ttm_yield = dividend_metrics.get("ttm_dividend_yield_pct", "N/A")
@@ -3632,19 +3640,19 @@ class GeminiAnalyzer:
             ttm_count = dividend_metrics.get("ttm_event_count", "N/A")
             report_date = financial_report.get("report_date", "N/A")
             prompt += f"""
-### 财报与分红（价值投资口径）
-| 指标 | 数值 | 说明 |
+### 財報與股利（價值投資口徑）
+| 指標 | 數值 | 說明 |
 |------|------|------|
-| 最近报告期 | {report_date} | 来自结构化财报字段 |
-| 营业收入 | {financial_report.get('revenue', 'N/A')} | |
-| 归母净利润 | {financial_report.get('net_profit_parent', 'N/A')} | |
-| 经营现金流 | {financial_report.get('operating_cash_flow', 'N/A')} | |
+| 最近報告期 | {report_date} | 來自結構化財報欄位 |
+| 營業收入 | {financial_report.get('revenue', 'N/A')} | |
+| 歸母淨利 | {financial_report.get('net_profit_parent', 'N/A')} | |
+| 營業現金流 | {financial_report.get('operating_cash_flow', 'N/A')} | |
 | ROE | {financial_report.get('roe', 'N/A')} | |
-| 近12个月每股现金分红 | {ttm_cash} | 仅现金分红、税前口径 |
-| TTM 股息率 | {ttm_yield} | 公式：近12个月每股现金分红 / 当前价格 × 100% |
-| TTM 分红事件数 | {ttm_count} | |
+| 近12個月每股現金股利 | {ttm_cash} | 僅現金股利、稅前口徑 |
+| TTM 殖利率 | {ttm_yield} | 公式：近12個月每股現金股利 / 目前價格 × 100% |
+| TTM 股利事件數 | {ttm_count} | |
 
-> 若上述字段为 N/A 或缺失，请明确写“数据缺失，无法判断”，禁止编造。
+> 若上述欄位為 N/A 或缺失，請明確寫「資料缺失，無法判斷」，禁止編造。
 """
 
         capital_flow_block = (
