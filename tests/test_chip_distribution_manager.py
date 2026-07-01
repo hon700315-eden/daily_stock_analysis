@@ -155,3 +155,21 @@ def test_manager_records_failed_chip_attempt_and_falls_back_to_next_fetcher():
         "provider_run_started",
         "provider_run",
     ]
+
+
+def test_台股籌碼不走中國資料源():
+    get_chip_circuit_breaker().reset()
+    china_chip = ChipDistribution(
+        code="2330.TW",
+        profit_ratio=0.61,
+        avg_cost=12.3,
+        concentration_90=0.13,
+    )
+    china_fetcher = _ChipFetcher("ChinaChipFetcher", 0, china_chip)
+    manager = DataFetcherManager(fetchers=[china_fetcher])
+
+    with patch("src.config.get_config", return_value=SimpleNamespace(enable_chip_distribution=True)):
+        chip = manager.get_chip_distribution("2330.TW")
+
+    assert chip is None
+    assert china_fetcher.calls == 0

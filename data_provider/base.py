@@ -2218,6 +2218,10 @@ class DataFetcherManager:
             logger.debug(f"[筹码分布] 功能已禁用，跳过 {stock_code}")
             return None
 
+        if _is_tw_market(stock_code):
+            logger.info("[籌碼分布] 台股 %s 尚無正式籌碼資料來源，跳過 A 股專屬資料源", stock_code)
+            return None
+
         circuit_breaker = get_chip_circuit_breaker()
 
         candidate_fetchers = []
