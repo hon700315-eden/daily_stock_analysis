@@ -16,7 +16,7 @@ if "newspaper" not in sys.modules:
     mock_np.Config = MagicMock()
     sys.modules["newspaper"] = mock_np
 
-from src.search_service import SearchResponse, SearchResult, SearchService
+from src.search_service import SearchResponse, SearchResult, SearchService, SerpAPISearchProvider
 from src.services.run_diagnostics import (
     activate_run_diagnostic_context,
     current_diagnostic_snapshot,
@@ -92,6 +92,103 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         service.search_stock_news("600519", "贵州茅台", max_results=5)
         kwargs = mock_search.call_args[1]
         self.assertEqual(kwargs["days"], 3)
+
+    def test_taiwan_stock_news_uses_taiwan_query_and_serpapi_locale(self) -> None:
+        """台股新聞搜尋不得使用中國地區提示。"""
+        fresh = datetime.now().date().isoformat()
+        provider = SerpAPISearchProvider(["dummy_key"])
+        provider._do_search = MagicMock(
+            return_value=_response([
+                _result(
+                    "台積電 2330.TW 今日新聞",
+                    fresh,
+                    snippet="台積電公布最新營運消息",
+                    source="tw.example.com",
+                )
+            ])
+        )
+        service = SearchService(
+            serpapi_keys=["dummy_key"],
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        service._providers = [provider]
+
+        response = service.search_stock_news("2330.TW", "台積電", max_results=1)
+
+        self.assertTrue(response.success)
+        actual_query = provider._do_search.call_args.args[0]
+        self.assertIn("台股", actual_query)
+        self.assertIn("台灣", actual_query)
+        self.assertNotIn("A股", actual_query)
+        self.assertNotIn("滬深", actual_query)
+        call_kwargs = provider._do_search.call_args.kwargs
+        self.assertEqual(call_kwargs["hl"], "zh-tw")
+        self.assertEqual(call_kwargs["gl"], "tw")
+        self.assertEqual(call_kwargs["google_domain"], "google.com.tw")
+
+    def test_taiwan_stock_detection_uses_existing_resolver_for_bare_codes(self) -> None:
+        """四碼裸碼必須經既有台股索引解析，避免年份或驗證碼誤判。"""
+        resolved = {
+            "2330": "2330.TW",
+            "6488": "6488.TWO",
+            "TWSE:2330": "2330.TW",
+            "TPEX:6488": "6488.TWO",
+        }
+
+        with patch(
+            "src.data.taiwan_stock_index.resolve_taiwan_stock_symbol",
+            side_effect=lambda code: resolved.get(str(code).upper()),
+        ) as mock_resolver:
+            self.assertTrue(SearchService._is_taiwan_stock("2330.TW"))
+            self.assertTrue(SearchService._is_taiwan_stock("6488.TWO"))
+            self.assertTrue(SearchService._is_taiwan_stock("TWSE:2330"))
+            self.assertTrue(SearchService._is_taiwan_stock("TPEX:6488"))
+            self.assertTrue(SearchService._is_taiwan_stock("2330"))
+            self.assertTrue(SearchService._is_taiwan_stock("6488"))
+            self.assertFalse(SearchService._is_taiwan_stock("2026"))
+            self.assertFalse(SearchService._is_taiwan_stock("0701"))
+            self.assertFalse(SearchService._is_taiwan_stock("1234"))
+
+        mock_resolver.assert_any_call("2330")
+        mock_resolver.assert_any_call("6488")
+        mock_resolver.assert_any_call("TWSE:2330")
+        mock_resolver.assert_any_call("TPEX:6488")
+        mock_resolver.assert_any_call("2026")
+
+    def test_taiwan_prefixed_stock_news_uses_canonical_query_code(self) -> None:
+        """TWSE/TPEX 前綴輸入應與 suffix / 裸碼走同一台股查詢語境。"""
+        fresh = datetime.now().date().isoformat()
+        provider = SerpAPISearchProvider(["dummy_key"])
+        provider._do_search = MagicMock(
+            return_value=_response([
+                _result(
+                    "台積電 2330.TW 今日新聞",
+                    fresh,
+                    snippet="TWSE:2330 台股最新消息",
+                    source="tw.example.com",
+                )
+            ])
+        )
+        service = SearchService(
+            serpapi_keys=["dummy_key"],
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        service._providers = [provider]
+
+        response = service.search_stock_news("TWSE:2330", "台積電", max_results=1)
+
+        self.assertTrue(response.success)
+        actual_query = provider._do_search.call_args.args[0]
+        self.assertIn("2330.TW", actual_query)
+        self.assertIn("台股", actual_query)
+        self.assertIn("台灣", actual_query)
+        self.assertNotIn("上交所", actual_query)
+        self.assertNotIn("深交所", actual_query)
+        self.assertNotIn("cninfo", actual_query.lower())
 
     def test_search_stock_news_strict_filters(self) -> None:
         """Drop old/unknown/future+2, keep future+1 and within-window dates."""
@@ -1616,6 +1713,8 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         cases = (
             ("00700.HK", {"00700", "HK00700"}),
             ("600519.SH", {"600519", "600519.SH"}),
+            ("2330.TW", {"2330", "2330.TW", "TWSE:2330"}),
+            ("6488.TWO", {"6488", "6488.TWO", "TPEX:6488"}),
             ("AAPL.US", {"AAPL", "NASDAQ:AAPL", "NYSE:AAPL"}),
         )
         for stock_code, expected_terms in cases:
@@ -1916,6 +2015,76 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         )
         self.assertIsNone(intel["market_analysis"].results[0].published_date)
         self.assertEqual(intel["market_analysis"].results[1].published_date, expected_analysis_date)
+
+    def test_taiwan_comprehensive_intel_uses_taiwan_context_queries(self) -> None:
+        """台股多維情報查詢不得混入中國交易所或 cninfo 語境。"""
+        fresh = datetime.now().date().isoformat()
+        service, mock_search = self._create_service_with_mock_provider(
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        mock_search.side_effect = [
+            _response([_result("latest_news", fresh)]),
+            _response([_result("market_analysis", None)]),
+            _response([_result("risk_check", fresh)]),
+            _response([_result("announcement_item", fresh)]),
+            _response([_result("earnings", None)]),
+        ]
+
+        with patch("src.search_service.time.sleep"):
+            intel = service.search_comprehensive_intel(
+                stock_code="2330.TW",
+                stock_name="台積電",
+                max_searches=5,
+            )
+
+        queries = [call.args[0] for call in mock_search.call_args_list]
+        joined_queries = " ".join(queries)
+        self.assertIn("台股", joined_queries)
+        self.assertIn("TWSE", joined_queries)
+        self.assertIn("TPEx", joined_queries)
+        self.assertIn("公開資訊觀測站", joined_queries)
+        self.assertIn("月營收", joined_queries)
+        self.assertIn("財報", joined_queries)
+        self.assertNotIn("上交所", joined_queries)
+        self.assertNotIn("深交所", joined_queries)
+        self.assertNotIn("cninfo", joined_queries.lower())
+        self.assertNotIn("A股", joined_queries)
+        self.assertNotIn("人民幣", joined_queries)
+        self.assertIn("announcements", intel)
+
+    def test_explicit_china_comprehensive_intel_keeps_china_context_queries(self) -> None:
+        """明確中國市場代碼仍保留原中國市場公告與財報搜尋語境。"""
+        fresh = datetime.now().date().isoformat()
+        service, mock_search = self._create_service_with_mock_provider(
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        mock_search.side_effect = [
+            _response([_result("latest_news", fresh)]),
+            _response([_result("market_analysis", None)]),
+            _response([_result("risk_check", fresh)]),
+            _response([_result("announcement_item", fresh)]),
+            _response([_result("earnings", None)]),
+        ]
+
+        with patch("src.search_service.time.sleep"):
+            intel = service.search_comprehensive_intel(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                max_searches=5,
+            )
+
+        queries = [call.args[0] for call in mock_search.call_args_list]
+        joined_queries = " ".join(queries)
+        self.assertIn("上交所", joined_queries)
+        self.assertIn("深交所", joined_queries)
+        self.assertIn("cninfo", joined_queries.lower())
+        self.assertIn("业绩预告", joined_queries)
+        self.assertNotIn("公開資訊觀測站", joined_queries)
+        self.assertNotIn("台股", joined_queries)
+        self.assertNotIn("新台幣", joined_queries)
+        self.assertIn("announcements", intel)
 
     def test_search_comprehensive_intel_widens_analytical_provider_windows(self) -> None:
         """Market analysis and earnings should request a longer provider lookback."""

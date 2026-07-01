@@ -38,6 +38,7 @@ from src.config import (
     normalize_news_strategy_profile,
     resolve_news_window_days,
 )
+from src.market_context import detect_market
 from src.services.run_diagnostics import record_provider_run, record_provider_run_started
 
 logger = logging.getLogger(__name__)
@@ -269,7 +270,13 @@ class BaseSearchProvider(ABC):
                 search_time=elapsed
             )
 
-    def search(self, query: str, max_results: int = 5, days: int = 7) -> SearchResponse:
+    def search(
+        self,
+        query: str,
+        max_results: int = 5,
+        days: int = 7,
+        **search_kwargs: Any,
+    ) -> SearchResponse:
         """
         执行搜索
         
@@ -281,7 +288,12 @@ class BaseSearchProvider(ABC):
         Returns:
             SearchResponse 对象
         """
-        return self._execute_search(query, max_results=max_results, days=days)
+        return self._execute_search(
+            query,
+            max_results=max_results,
+            days=days,
+            **search_kwargs,
+        )
 
 
 class TavilySearchProvider(BaseSearchProvider):
@@ -488,7 +500,16 @@ class SerpAPISearchProvider(BaseSearchProvider):
     def __init__(self, api_keys: List[str]):
         super().__init__(api_keys, "SerpAPI")
     
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+    def _do_search(
+        self,
+        query: str,
+        api_key: str,
+        max_results: int,
+        days: int = 7,
+        hl: str = "zh-cn",
+        gl: str = "cn",
+        google_domain: str = "google.com.hk",
+    ) -> SearchResponse:
         """执行 SerpAPI 搜索"""
         try:
             from serpapi import GoogleSearch
@@ -518,9 +539,9 @@ class SerpAPISearchProvider(BaseSearchProvider):
                 "engine": "google",
                 "q": query,
                 "api_key": api_key,
-                "google_domain": "google.com.hk", # 使用香港谷歌，中文支持较好
-                "hl": "zh-cn",  # 中文界面
-                "gl": "cn",     # 中国地区偏好
+                "google_domain": google_domain,
+                "hl": hl,
+                "gl": gl,
                 "tbs": tbs,     # 时间范围限制
                 "num": max_results # 请求的结果数量，注意：Google API有时不严格遵守
             }
@@ -2376,6 +2397,29 @@ class SearchService:
         return False
 
     @classmethod
+    def _is_taiwan_stock(cls, stock_code: str) -> bool:
+        """辨識台股代碼；裸碼與交易所前綴必須通過既有台股索引解析。"""
+        code = (stock_code or "").strip().upper()
+        if not code:
+            return False
+        if detect_market(code) == "tw":
+            return True
+        return cls._resolve_taiwan_stock_symbol(code) is not None
+
+    @staticmethod
+    def _resolve_taiwan_stock_symbol(stock_code: str) -> Optional[str]:
+        """Return canonical Taiwan Yahoo suffix symbol when existing resolver confirms it."""
+        code = (stock_code or "").strip().upper()
+        if not code:
+            return None
+        try:
+            from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol
+
+            return resolve_taiwan_stock_symbol(code)
+        except Exception:
+            return None
+
+    @classmethod
     def _contains_chinese_text(cls, value: Optional[str]) -> bool:
         """Return True when the input contains CJK characters."""
         return bool(value and cls._CHINESE_TEXT_RE.search(value))
@@ -2468,10 +2512,19 @@ class SearchService:
         prefer_chinese: bool,
     ) -> Dict[str, str]:
         """Resolve Brave locale hints without forcing US bias onto non-US symbols."""
+        if cls._is_taiwan_stock(stock_code):
+            return {"search_lang": "zh-hant", "country": "TW"}
         if prefer_chinese:
             return {"search_lang": "zh-hans", "country": "CN"}
         if cls._is_us_stock(stock_code):
             return {"search_lang": "en", "country": "US"}
+        return {}
+
+    @classmethod
+    def _serpapi_search_locale(cls, stock_code: str) -> Dict[str, str]:
+        """依市場提供 SerpAPI 地區與語言提示。"""
+        if cls._is_taiwan_stock(stock_code):
+            return {"hl": "zh-tw", "gl": "tw", "google_domain": "google.com.tw"}
         return {}
 
     # A-share ETF code prefixes (Shanghai 51/52/56/58, Shenzhen 15/16/18)
@@ -2599,11 +2652,14 @@ class SearchService:
         terms: List[str] = []
         upper = raw.upper()
         code_for_variants = upper
+        taiwan_symbol = cls._resolve_taiwan_stock_symbol(raw)
         if "." in upper:
             base, suffix = upper.rsplit(".", 1)
             if suffix == "HK" and base.isdigit() and 1 <= len(base) <= 5:
                 code_for_variants = f"HK{base.zfill(5)}"
             elif suffix in {"SH", "SZ", "SS", "BJ"} and base.isdigit() and len(base) == 6:
+                code_for_variants = base
+            elif suffix in {"TW", "TWO"} and base.isdigit() and len(base) in {4, 5, 6}:
                 code_for_variants = base
             elif suffix == "US" and re.fullmatch(r"[A-Z]{1,5}", base):
                 code_for_variants = base
@@ -2630,6 +2686,14 @@ class SearchService:
             cls._append_unique(terms, f"{padded}.HK")
             cls._append_unique(terms, f"{short}.HK")
             cls._append_unique(terms, f"HKEX:{short}")
+            return terms
+
+        if taiwan_symbol:
+            base, suffix = taiwan_symbol.rsplit(".", 1)
+            exchange = "TWSE" if suffix == "TW" else "TPEX"
+            cls._append_unique(terms, base)
+            cls._append_unique(terms, taiwan_symbol)
+            cls._append_unique(terms, f"{exchange}:{base}")
             return terms
 
         if code_for_variants.isdigit() and len(code_for_variants) == 6:
@@ -2662,7 +2726,7 @@ class SearchService:
 
         if cls._contains_chinese_text(raw):
             cleaned = re.sub(
-                r"(股份有限公司|有限责任公司|有限公司|控股集团|控股|集团|股份|公司)$",
+                r"(股份有限公司|有限责任公司|有限公司|控股集团|控股|集团|股份|公司|興櫃|上櫃|上市)$",
                 "",
                 without_market_suffix,
             ).strip()
@@ -3604,9 +3668,14 @@ class SearchService:
 
         # 构建搜索查询（优化搜索效果）
         is_foreign = self._is_foreign_stock(stock_code)
+        is_taiwan = self._is_taiwan_stock(stock_code)
+        query_stock_code = self._resolve_taiwan_stock_symbol(stock_code) if is_taiwan else None
+        query_stock_code = query_stock_code or stock_code
         if focus_keywords:
             # 如果提供了关键词，直接使用关键词作为查询
             query = " ".join(focus_keywords)
+        elif is_taiwan:
+            query = f"{stock_name} {query_stock_code} 台股 最新消息 台灣"
         elif prefer_chinese:
             query = f"{stock_name} {stock_code} 股票 最新消息"
         elif is_foreign:
@@ -3701,6 +3770,8 @@ class SearchService:
                             prefer_chinese=prefer_chinese,
                         )
                     )
+                elif isinstance(provider, SerpAPISearchProvider):
+                    search_kwargs.update(self._serpapi_search_locale(stock_code))
 
                 started_at = time.monotonic()
                 try:
@@ -3945,9 +4016,69 @@ class SearchService:
         search_count = 0
 
         is_foreign = self._is_foreign_stock(stock_code)
+        is_taiwan = self._is_taiwan_stock(stock_code)
+        query_stock_code = self._resolve_taiwan_stock_symbol(stock_code) if is_taiwan else None
+        query_stock_code = query_stock_code or stock_code
         is_index_etf = self.is_index_or_etf(stock_code, stock_name)
 
-        if is_foreign:
+        if is_taiwan:
+            search_dimensions = [
+                {
+                    'name': 'latest_news',
+                    'query': f"{stock_name} {query_stock_code} 台股 最新消息 重大 事件",
+                    'desc': '最新消息',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'market_analysis',
+                    'query': f"{stock_name} 台股 研究報告 目標價 評等 分析",
+                    'desc': '機構分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'risk_check',
+                    'query': (
+                        f"{stock_name} 指數走勢 追蹤誤差 淨值 表現"
+                        if is_index_etf else f"{stock_name} 處分 裁罰 違規 訴訟 利空 風險 台股"
+                    ),
+                    'desc': '風險排查',
+                    'tavily_topic': None if is_index_etf else 'news',
+                    'strict_freshness': not is_index_etf,
+                },
+                {
+                    'name': 'announcements',
+                    'query': (
+                        f"{stock_name} {query_stock_code} 公告 指數調整 成分變化"
+                        if is_index_etf else f"{stock_name} {query_stock_code} 公司公告 重大訊息 TWSE TPEx 公開資訊觀測站"
+                    ),
+                    'desc': '公司公告',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'earnings',
+                    'query': (
+                        f"{stock_name} 指數成分 淨值 追蹤表現"
+                        if is_index_etf else f"{stock_name} 財報 月營收 營收 淨利 每股盈餘"
+                    ),
+                    'desc': '財務資訊',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'industry',
+                    'query': (
+                        f"{stock_name} 指數成分股 產業配置 權重"
+                        if is_index_etf else f"{stock_name} 產業 競爭對手 市占率 產業前景 台灣"
+                    ),
+                    'desc': '產業分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+            ]
+        elif is_foreign:
             search_dimensions = [
                 {
                     'name': 'latest_news',
@@ -4104,6 +4235,23 @@ class SearchService:
                     max_results=provider_max_results,
                     days=request_days,
                     topic=dim['tavily_topic'],
+                )
+            elif isinstance(provider, SerpAPISearchProvider):
+                response = provider.search(
+                    dim['query'],
+                    max_results=provider_max_results,
+                    days=request_days,
+                    **self._serpapi_search_locale(stock_code),
+                )
+            elif isinstance(provider, BraveSearchProvider):
+                response = provider.search(
+                    dim['query'],
+                    max_results=provider_max_results,
+                    days=request_days,
+                    **self._brave_search_locale(
+                        stock_code,
+                        prefer_chinese=self._should_prefer_chinese_news(stock_code, stock_name),
+                    ),
                 )
             else:
                 response = provider.search(

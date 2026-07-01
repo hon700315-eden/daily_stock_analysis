@@ -3505,6 +3505,9 @@ class GeminiAnalyzer:
         code = context.get('code', 'Unknown')
         report_language = normalize_report_language(report_language)
         _, _, use_legacy_default_prompt = self._get_skill_prompt_sections()
+        market = detect_market(code)
+        is_taiwan_market = market == "tw"
+        price_unit = "新台幣" if is_taiwan_market else "元"
         
         # 优先使用上下文中的股票名称（从 realtime_quote 获取）
         stock_name = context.get('stock_name', name)
@@ -3521,21 +3524,21 @@ class GeminiAnalyzer:
         volume_label = "实时成交量" if realtime_overlay_quote else "成交量"
         amount_label = "实时成交额" if realtime_overlay_quote else "成交额"
         quote_rows = [
-            f"| {close_price_label} | {today.get('close', 'N/A')} 元 |",
+            f"| {close_price_label} | {today.get('close', 'N/A')} {price_unit} |",
         ]
         if not hide_regular_session_ohlc:
             quote_rows.extend(
                 [
-                    f"| 开盘价 | {today.get('open', 'N/A')} 元 |",
-                    f"| 最高价 | {today.get('high', 'N/A')} 元 |",
-                    f"| 最低价 | {today.get('low', 'N/A')} 元 |",
+                    f"| 开盘价 | {today.get('open', 'N/A')} {price_unit} |",
+                    f"| 最高价 | {today.get('high', 'N/A')} {price_unit} |",
+                    f"| 最低价 | {today.get('low', 'N/A')} {price_unit} |",
                 ]
             )
         quote_rows.extend(
             [
                 f"| {pct_chg_label} | {today.get('pct_chg', 'N/A')}% |",
                 f"| {volume_label} | {self._format_volume(today.get('volume'))} |",
-                f"| {amount_label} | {self._format_amount(today.get('amount'))} |",
+                f"| {amount_label} | {self._format_amount(today.get('amount'), currency_unit=price_unit)} |",
             ]
         )
         quote_rows_text = "\n".join(quote_rows)
@@ -3589,13 +3592,13 @@ class GeminiAnalyzer:
 ### 实时行情增强数据
 | 指标 | 数值 | 解读 |
 |------|------|------|
-| 当前价格 | {rt.get('price', 'N/A')} 元 | |
+| 当前价格 | {rt.get('price', 'N/A')} {price_unit} | |
 | **量比** | **{rt.get('volume_ratio', 'N/A')}** | {rt.get('volume_ratio_desc', '')} |
 | **换手率** | **{rt.get('turnover_rate', 'N/A')}%** | |
 | 市盈率(动态) | {rt.get('pe_ratio', 'N/A')} | |
 | 市净率 | {rt.get('pb_ratio', 'N/A')} | |
-| 总市值 | {self._format_amount(rt.get('total_mv'))} | |
-| 流通市值 | {self._format_amount(rt.get('circ_mv'))} | |
+| 总市值 | {self._format_amount(rt.get('total_mv'), currency_unit=price_unit)} | |
+| 流通市值 | {self._format_amount(rt.get('circ_mv'), currency_unit=price_unit)} | |
 | 60日涨跌幅 | {rt.get('change_60d', 'N/A')}% | 中期表现 |
 """
 
@@ -3824,6 +3827,54 @@ class GeminiAnalyzer:
                 news_max_age_days=getattr(prompt_config, "news_max_age_days", 3),
                 news_strategy_profile=getattr(prompt_config, "news_strategy_profile", "short"),
             )
+        if is_taiwan_market:
+            news_focus_instructions = f"""以下是 **{stock_name}({code})** 近{news_window_days}日的台股新聞搜尋結果，請只根據可見標題、摘要、來源與日期提取：
+1. 🚨 **風險警報**：處分、裁罰、重大訊息、營運利空
+2. 🎯 **利多催化**：訂單、產品、法說、政策或產業需求
+3. 📊 **財務訊號**：月營收、財報、EPS、毛利率或展望；未提供數字時不得自行補值
+   - 搜尋摘要中的數字只可視為外部網頁線索，不得當成已驗證財務資料；缺少來源、日期或可驗證內容時必須標為 unavailable
+4. 🕒 **時間規則（強制）**：
+   - 輸出到 `risk_alerts` / `positive_catalysts` / `latest_news` 的每一條都必須帶具體日期（YYYY-MM-DD）
+   - 超出近{news_window_days}日窗口的新聞一律忽略
+   - 時間未知、無法確定發布日期的新聞一律忽略
+   - 不得把台股新聞失敗改寫成中國市場、A 股、滬深或人民幣語境"""
+            no_news_text = "未找到該台股近期可驗證新聞。請主要依據已提供的行情、技術與結構化資料分析；不得補造新聞或切換到中國市場語境。"
+            decision_name_hint = (
+                f"正確的股票名稱格式為「股票名稱（股票代碼）」，例如「台積電（{code}）」；"
+                "若名稱無法由輸入資料確認，請保留輸入名稱，不得自行猜測。"
+            )
+            focus_questions = (
+                """### 重點關注（必須明確回答）：
+1. ❓ 目前結構是否滿足激活技能的關鍵觸發條件？
+2. ❓ 目前進場位置與風險報酬是否合理？若偏離過大，請明確說明等待條件
+3. ❓ 量能、波動、三大法人或融資融券資料（若已提供）是否支持目前結論？
+4. ❓ 消息面有無重大利空或與技能結論衝突的資訊？
+5. ❓ 若結論成立，具體觸發條件、停損位、觀察點分別是什麼？"""
+            )
+            price_target_requirement = "買入價、停損價、目標價（依台股最小報價單位描述；資料不足時填寫無法判斷）"
+        else:
+            news_focus_instructions = f"""以下是 **{stock_name}({code})** 近{news_window_days}日的新聞搜尋結果，請重點提取：
+1. 🚨 **風險警報**：減持、處罰、利空
+2. 🎯 **利多催化**：業績、合約、政策
+3. 📊 **業績預期**：年報預告、業績快報
+4. 🕒 **時間規則（強制）**：
+   - 輸出到 `risk_alerts` / `positive_catalysts` / `latest_news` 的每一條都必須帶具體日期（YYYY-MM-DD）
+   - 超出近{news_window_days}日窗口的新聞一律忽略
+   - 時間未知、無法確定發布日期的新聞一律忽略"""
+            no_news_text = "未搜尋到該股票近期的相關新聞。請主要依據技術面資料進行分析。"
+            decision_name_hint = (
+                f"正確的股票名稱格式為「股票名稱（股票代碼）」，例如「貴州茅台（600519）」。\n"
+                f"如果上方顯示的股票名稱為\"股票{code}\"或不正確，請在分析開頭**明確輸出該股票的正確中文全稱**。"
+            )
+            focus_questions = (
+                """### 重點關注（必須明確回答）：
+1. ❓ 目前結構是否滿足激活技能的關鍵觸發條件？
+2. ❓ 目前進場位置與風險報酬是否合理？若偏離過大，請明確說明等待條件
+3. ❓ 量能、波動與籌碼結構是否支持目前結論？
+4. ❓ 消息面有無重大利空或與技能結論衝突的資訊？
+5. ❓ 若結論成立，具體觸發條件、停損位、觀察點分別是什麼？"""
+            )
+            price_target_requirement = "買入價、停損價、目標價（精確到分）"
         prompt += """
 ---
 
@@ -3831,22 +3882,15 @@ class GeminiAnalyzer:
 """
         if news_context:
             prompt += f"""
-以下是 **{stock_name}({code})** 近{news_window_days}日的新闻搜索结果，请重点提取：
-1. 🚨 **风险警报**：减持、处罚、利空
-2. 🎯 **利好催化**：业绩、合同、政策
-3. 📊 **业绩预期**：年报预告、业绩快报
-4. 🕒 **时间规则（强制）**：
-   - 输出到 `risk_alerts` / `positive_catalysts` / `latest_news` 的每一条都必须带具体日期（YYYY-MM-DD）
-   - 超出近{news_window_days}日窗口的新闻一律忽略
-   - 时间未知、无法确定发布日期的新闻一律忽略
+{news_focus_instructions}
 
 ```
 {news_context}
 ```
 """
         else:
-            prompt += """
-未搜索到该股票近期的相关新闻。请主要依据技术面数据进行分析。
+            prompt += f"""
+{no_news_text}
 """
 
         # 注入缺失数据警告
@@ -3877,8 +3921,7 @@ class GeminiAnalyzer:
 """
         prompt += f"""
 ### ⚠️ 重要：输出正确的股票名称格式
-正确的股票名称格式为“股票名称（股票代码）”，例如“贵州茅台（600519）”。
-如果上方显示的股票名称为"股票{code}"或不正确，请在分析开头**明确输出该股票的正确中文全称**。
+{decision_name_hint}
 """
         if use_legacy_default_prompt:
             prompt += f"""
@@ -3893,12 +3936,7 @@ class GeminiAnalyzer:
         else:
             prompt += f"""
 
-### 重点关注（必须明确回答）：
-1. ❓ 当前结构是否满足激活技能的关键触发条件？
-2. ❓ 当前入场位置与风险回报是否合理？若偏离过大，请明确说明等待条件
-3. ❓ 量能、波动与筹码结构是否支持当前结论？
-4. ❓ 消息面有无重大利空或与技能结论冲突的信息？
-5. ❓ 若结论成立，具体触发条件、止损位、观察点分别是什么？
+{focus_questions}
 """
         prompt += f"""
 
@@ -3906,7 +3944,7 @@ class GeminiAnalyzer:
 - **股票名称**：必须输出正确的中文全称（如"贵州茅台"而非"股票600519"）
 - **核心结论**：一句话说清该买/该卖/该等
 - **持仓分类建议**：空仓者怎么做 vs 持仓者怎么做
-- **具体狙击点位**：买入价、止损价、目标价（精确到分）
+- **具体狙击点位**：{price_target_requirement}
 - **检查清单**：每项用 ✅/⚠️/❌ 标记
 - **消息面时间合规**：`latest_news`、`risk_alerts`、`positive_catalysts` 不得包含超出近{news_window_days}日或时间未知的信息
 - **技术面一致性**：严禁把“空头排列”和“多头排列”等互斥结论同时当作有效依据；若基本面/事件面与技术面冲突，必须明确写“事件先行、技术待确认”或“基本面偏多，但技术面尚未确认”
@@ -3947,10 +3985,17 @@ class GeminiAnalyzer:
         else:
             return f"{volume:.0f} 股"
     
-    def _format_amount(self, amount: Optional[float]) -> str:
+    def _format_amount(self, amount: Optional[float], currency_unit: str = "元") -> str:
         """格式化成交额显示"""
         if amount is None:
             return 'N/A'
+        if currency_unit == "新台幣":
+            if amount >= 1e8:
+                return f"新台幣 {amount / 1e8:.2f} 億"
+            elif amount >= 1e4:
+                return f"新台幣 {amount / 1e4:.2f} 萬"
+            else:
+                return f"新台幣 {amount:.0f}"
         if amount >= 1e8:
             return f"{amount / 1e8:.2f} 亿元"
         elif amount >= 1e4:

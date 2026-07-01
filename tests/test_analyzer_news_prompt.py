@@ -172,12 +172,68 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         with patch("src.analyzer.get_config", return_value=fake_cfg):
             prompt = analyzer._format_prompt(context, "贵州茅台", news_context="news")
 
-        self.assertIn("近7日的新闻搜索结果", prompt)
-        self.assertIn("每一条都必须带具体日期（YYYY-MM-DD）", prompt)
-        self.assertIn("超出近7日窗口的新闻一律忽略", prompt)
-        self.assertIn("时间未知、无法确定发布日期的新闻一律忽略", prompt)
+        self.assertIn("近7日的新聞搜尋結果", prompt)
+        self.assertIn("每一條都必須帶具體日期（YYYY-MM-DD）", prompt)
+        self.assertIn("超出近7日窗口的新聞一律忽略", prompt)
+        self.assertIn("時間未知、無法確定發布日期的新聞一律忽略", prompt)
         self.assertIn("财报与分红（价值投资口径）", prompt)
         self.assertIn("禁止编造", prompt)
+
+    def test_taiwan_prompt_uses_taiwan_news_and_currency_context(self) -> None:
+        """台股 prompt 不得回落到中國市場新聞或人民幣語境。"""
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        context = {
+            "code": "2330.TW",
+            "stock_name": "台積電",
+            "date": "2026-07-01",
+            "today": {"close": 1000, "amount": 123456789},
+            "realtime": {"price": 1005, "total_mv": 1000000000, "circ_mv": 800000000},
+            "news_window_days": 3,
+        }
+
+        prompt = analyzer._format_prompt(
+            context,
+            "台積電",
+            news_context="2026-07-01 台積電公布月營收。",
+        )
+
+        self.assertIn("1000 新台幣", prompt)
+        self.assertIn("新台幣 10.00 億", prompt)
+        self.assertIn("台股新聞搜尋結果", prompt)
+        self.assertIn("月營收", prompt)
+        self.assertIn("不得當成已驗證財務資料", prompt)
+        self.assertIn("unavailable", prompt)
+        self.assertIn("不得把台股新聞失敗改寫成中國市場、A 股、滬深或人民幣語境", prompt)
+        self.assertEqual(prompt.count("人民幣"), 1)
+        self.assertEqual(prompt.count("滬深"), 1)
+        self.assertNotIn("年報預告", prompt)
+
+    def test_non_taiwan_prompt_does_not_use_taiwan_context(self) -> None:
+        """其他市場 prompt 不應被台股幣別或台股新聞語境污染。"""
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        context = {
+            "code": "AAPL",
+            "stock_name": "Apple",
+            "date": "2026-07-01",
+            "today": {"close": 200, "amount": 123456789},
+            "realtime": {"price": 201, "total_mv": 1000000000, "circ_mv": 800000000},
+            "news_window_days": 3,
+        }
+
+        prompt = analyzer._format_prompt(
+            context,
+            "Apple",
+            news_context="2026-07-01 Apple revenue guidance improved.",
+        )
+
+        self.assertNotIn("台股新聞搜尋結果", prompt)
+        self.assertNotIn("新台幣", prompt)
+        self.assertNotIn("公開資訊觀測站", prompt)
+        self.assertIn("Apple", prompt)
 
     def test_prompt_includes_capital_flow_as_operation_filter(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
@@ -232,8 +288,8 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         with patch("src.analyzer.get_config", return_value=fake_cfg):
             prompt = analyzer._format_prompt(context, "贵州茅台", news_context="news")
 
-        self.assertIn("近1日的新闻搜索结果", prompt)
-        self.assertIn("超出近1日窗口的新闻一律忽略", prompt)
+        self.assertIn("近1日的新聞搜尋結果", prompt)
+        self.assertIn("超出近1日窗口的新聞一律忽略", prompt)
 
     def test_format_prompt_injects_market_phase_and_pack_summary_before_technical_data(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
@@ -473,7 +529,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         }
         prompt = analyzer._format_prompt(context, "贵州茅台", news_context=None)
 
-        self.assertIn("当前结构是否满足激活技能的关键触发条件", prompt)
+        self.assertIn("目前結構是否滿足激活技能的關鍵觸發條件", prompt)
         self.assertNotIn("是否满足 MA5>MA10>MA20 多头排列", prompt)
         self.assertNotIn("超过5%必须标注\"严禁追高\"", prompt)
         self.assertNotIn("MA5>MA10>MA20为多头", prompt)
