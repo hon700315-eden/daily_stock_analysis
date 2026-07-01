@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [測試] 補齊台股 retained snapshot 選擇、snapshot_only、技術指標缺值與 stocks quote/history/technical API 回歸測試。
 - [文檔] 新增台股市場概況正式資料可用性稽核，記錄 Drive snapshot/package 欄位與未接線原因。
 - [修復] 修正台股市場復盤區域初始化，避免 `tw` 被降回中國市場。
+- [修復] 修正 Web 股票自動完成索引缺少台股資料，支援 `2330`、`2330.TW`、`TWSE:2330`、`台積電`、`6488`、`6488.TWO`、`TPEX:6488`、`環球晶` 搜尋。
 
 ## [3.24.1] - 2026-06-28
 

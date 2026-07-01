@@ -95,7 +95,9 @@ export function normalizeStockCode(stockCode: string): string {
 }
 
 function stockCodeMatchKey(stockCode: string): string {
-  return normalizeStockCode(stockCode).toUpperCase();
+  const normalized = normalizeStockCode(stockCode).toUpperCase();
+  const taiwanSuffix = normalized.match(/^(\d{4,6})\.(?:TW|TWO)$/);
+  return taiwanSuffix ? taiwanSuffix[1] : normalized;
 }
 
 export function areStockCodesEquivalent(left: string, right: string): boolean {

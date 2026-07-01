@@ -561,12 +561,12 @@ describe('ChatPage', () => {
     );
 
     fireEvent.click(await screen.findByRole('checkbox', { name: '均线金叉' }));
-    fireEvent.click(screen.getByRole('button', { name: '用缠论分析茅台' }));
+    fireEvent.click(screen.getByRole('button', { name: '用纏論分析台積電' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: '用缠论分析茅台',
+          message: '用纏論分析台積電',
           skills: ['chan_theory'],
         }),
         expect.objectContaining({
@@ -1176,8 +1176,8 @@ describe('ChatPage', () => {
   it('restores active stock context from loaded session messages', async () => {
     mockStoreState.messages = [
       { id: 'm-1', role: 'user', content: '请分析 2330' },
-      { id: 'm-2', role: 'assistant', content: '600519 分析结果' },
-      { id: 'm-3', role: 'user', content: '先不看 600519，换成 AAPL 看看' },
+      { id: 'm-2', role: 'assistant', content: '2330 分析結果' },
+      { id: 'm-3', role: 'user', content: '先不看 2330，換成 AAPL 看看' },
       { id: 'm-4', role: 'assistant', content: 'AAPL 分析结果' },
     ];
 
@@ -1461,8 +1461,8 @@ describe('ChatPage', () => {
 });
 
 describe('extractStockCodeFromMessage', () => {
-  it('returns 6-digit A-share code', () => {
-    expect(extractStockCodeFromMessage('分析 2330 趋势')).toBe('600519');
+  it('returns Taiwan bare code and 6-digit A-share code', () => {
+    expect(extractStockCodeFromMessage('分析 2330 趨勢')).toBe('2330');
     expect(extractStockCodeFromMessage('002460')).toBe('002460');
   });
 
@@ -1475,8 +1475,9 @@ describe('extractStockCodeFromMessage', () => {
     expect(extractStockCodeFromMessage('1810.HK')).toBe('HK01810');
   });
 
-  it('returns code with .SH/.SZ suffix (normalized)', () => {
-    expect(extractStockCodeFromMessage('看 2330.TW')).toBe('600519');
+  it('returns Taiwan and A-share suffix codes (normalized)', () => {
+    expect(extractStockCodeFromMessage('看 2330.TW')).toBe('2330.TW');
+    expect(extractStockCodeFromMessage('看 6488.TWO')).toBe('6488.TWO');
     expect(extractStockCodeFromMessage('000001.SZ')).toBe('000001');
   });
 
@@ -1535,7 +1536,7 @@ describe('extractStockCodeFromMessage', () => {
   });
 
   it('returns all stock codes in message order', () => {
-    expect(extractStockCodesFromMessage('分析 2330 和 AAPL 的差异')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('分析 2330 和 AAPL 的差異')).toEqual(['2330', 'AAPL']);
     expect(extractStockCodesFromMessage('分析 AAPL 和 600519 的差异')).toEqual(['AAPL', '600519']);
     expect(extractStockCodesFromMessage('AAPL 和 TSLA 哪个更值得买')).toEqual(['AAPL', 'TSLA']);
     expect(extractStockCodesFromMessage('比较 BRK.B 和 AAPL')).toEqual(['BRK.B', 'AAPL']);
@@ -1551,9 +1552,10 @@ describe('extractStockCodeFromMessage', () => {
   it('returns all HK and A-share variants without exchange affix tokens', () => {
     expect(extractStockCodesFromMessage('比较 01810 和 AAPL')).toEqual(['HK01810', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 1810.HK 和 AAPL')).toEqual(['HK01810', 'AAPL']);
-    expect(extractStockCodesFromMessage('比较 2330.TW 和 AAPL')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('比較 2330.TW 和 AAPL')).toEqual(['2330.TW', 'AAPL']);
+    expect(extractStockCodesFromMessage('比較 TWSE:2330 和 TPEX:6488')).toEqual(['TWSE:2330', 'TPEX:6488']);
     expect(extractStockCodesFromMessage('比较 000001.SZ 和 SS')).toEqual(['000001']);
-    expect(extractStockCodesFromMessage('比较 SH2330 和 AAPL')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('比較 SH600519 和 AAPL')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 SZ000001 和 AAPL')).toEqual(['000001', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 BJ920748 和 AAPL')).toEqual(['920748', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 HK01810 和 AAPL')).toEqual(['HK01810', 'AAPL']);
@@ -1568,7 +1570,7 @@ describe('extractStockCodeFromMessage', () => {
 
 describe('watchlist button with code variants', () => {
   it('shows "从自选删除" when canonical code is in watchlist and user inputs variant', async () => {
-    mockGetWatchlist.mockResolvedValue(['600519', 'HK01810']);
+    mockGetWatchlist.mockResolvedValue(['2330.TW', 'HK01810']);
 
     render(
       <MemoryRouter>
@@ -1577,7 +1579,7 @@ describe('watchlist button with code variants', () => {
     );
 
     const textarea = await screen.findByPlaceholderText(/例如/);
-    fireEvent.change(textarea, { target: { value: '分析 2330.SH' } });
+    fireEvent.change(textarea, { target: { value: '分析 2330.TW' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     expect(await screen.findByText('从自选删除')).toBeInTheDocument();

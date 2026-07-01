@@ -104,6 +104,30 @@ const mockIndex: StockIndexItem[] = [
     popularity: 92,
   },
   {
+    canonicalCode: "2330.TW",
+    displayCode: "2330",
+    nameZh: "台積電",
+    pinyinFull: "taijidian",
+    pinyinAbbr: "tjd",
+    aliases: ["TWSE:2330"],
+    market: "TW",
+    assetType: "stock",
+    active: true,
+    popularity: 100,
+  },
+  {
+    canonicalCode: "6488.TWO",
+    displayCode: "6488",
+    nameZh: "環球晶",
+    pinyinFull: "huanqiujing",
+    pinyinAbbr: "hqj",
+    aliases: ["TPEX:6488"],
+    market: "TW",
+    assetType: "stock",
+    active: true,
+    popularity: 100,
+  },
+  {
     canonicalCode: "600000.SH",
     displayCode: "600000",
     nameZh: "浦发银行",
@@ -281,6 +305,17 @@ describe('searchStocks', () => {
     const results = searchStocks('三星', mockIndex);
     expect(results).toHaveLength(1);
     expect(results[0].canonicalCode).toBe('005930.KS');
+  });
+
+  test('台股代碼、Yahoo suffix、交易所前綴與名稱匹配', () => {
+    expect(searchStocks('2330', mockIndex)[0].canonicalCode).toBe('2330.TW');
+    expect(searchStocks('2330.TW', mockIndex)[0].canonicalCode).toBe('2330.TW');
+    expect(searchStocks('TWSE:2330', mockIndex)[0].canonicalCode).toBe('2330.TW');
+    expect(searchStocks('台積電', mockIndex)[0].canonicalCode).toBe('2330.TW');
+    expect(searchStocks('6488', mockIndex)[0].canonicalCode).toBe('6488.TWO');
+    expect(searchStocks('6488.TWO', mockIndex)[0].canonicalCode).toBe('6488.TWO');
+    expect(searchStocks('TPEX:6488', mockIndex)[0].canonicalCode).toBe('6488.TWO');
+    expect(searchStocks('環球晶', mockIndex)[0].canonicalCode).toBe('6488.TWO');
   });
 
   describe('Edge case tests', () => {

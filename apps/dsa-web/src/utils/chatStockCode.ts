@@ -53,6 +53,8 @@ export function extractStockCodeFromMessage(message: string): string | null {
 export function extractStockCodesFromMessage(message: string): string[] {
   // More specific patterns first to avoid greedy \d{6} capturing inside .SH/.SZ codes
   const patterns = [
+    /\b((?:TWSE|TPEX):\d{4,6})\b/gi,
+    /\b(\d{4,6}\.(?:TW|TWO))\b/gi,
     /\b(30\d{4}\.SZ)\b/gi,
     /\b(68\d{4}\.SH)\b/gi,
     /\b(00\d{4}\.SZ)\b/gi,
@@ -62,6 +64,7 @@ export function extractStockCodesFromMessage(message: string): string[] {
     /\b(BJ\d{6})\b/gi,
     /\b(hk\d{4,5})\b/gi,
     /\b(\d{1,5}\.HK)\b/gi,
+    /\b(\d{4})\b/g,
     /\b(\d{5,6})\b/g,
     /\b([A-Z]{2,5}\.[A-Z]{1,2})\b/g,
     /\b([A-Z]{2,5})\b/g,
@@ -92,7 +95,13 @@ export function extractStockCodesFromMessage(message: string): string[] {
 
   const stockCodes: string[] = [];
   const seen = new Set<string>();
+  const acceptedRanges: Array<{ start: number; end: number }> = [];
   for (const match of matches) {
+    const start = match.index;
+    const end = start + match.value.length;
+    if (acceptedRanges.some((range) => start < range.end && end > range.start)) {
+      continue;
+    }
     if (EXCHANGE_PREFIXES.has(match.value.toUpperCase())) {
       continue;
     }
@@ -107,6 +116,7 @@ export function extractStockCodesFromMessage(message: string): string[] {
     if (!seen.has(stockCode)) {
       seen.add(stockCode);
       stockCodes.push(stockCode);
+      acceptedRanges.push({ start, end });
     }
   }
   return stockCodes;

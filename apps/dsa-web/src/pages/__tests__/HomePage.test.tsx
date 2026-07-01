@@ -631,7 +631,7 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: '大盘复盘' }));
+    fireEvent.click(await screen.findByRole('button', { name: '台股大盤復盤' }));
 
     await waitFor(() => {
       expect(analysisApi.triggerMarketReview).toHaveBeenCalledWith({ sendNotification: true });
@@ -679,7 +679,7 @@ describe('HomePage', () => {
       </UiLanguageProvider>,
     );
 
-    fireEvent.change(await screen.findByPlaceholderText('Enter a stock code or name, e.g. 600519, Kweichow Moutai, AAPL'), {
+    fireEvent.change(await screen.findByPlaceholderText('Enter a stock code or name, e.g. 2330, TSMC, 6488.TWO'), {
       target: { value: 'AAPL' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
@@ -730,7 +730,7 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: '大盘复盘' }));
+    fireEvent.click(await screen.findByRole('button', { name: '台股大盤復盤' }));
 
     expect(await screen.findByRole('button', { name: 'Copy Markdown Source' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy Plain Text' })).toBeInTheDocument();
@@ -776,7 +776,7 @@ describe('HomePage', () => {
     });
     dashboardScroll.scrollTop = 480;
 
-    fireEvent.click(screen.getByRole('button', { name: '大盘复盘' }));
+    fireEvent.click(screen.getByRole('button', { name: '台股大盤復盤' }));
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
@@ -859,7 +859,7 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: '大盘复盘' }));
+    fireEvent.click(await screen.findByRole('button', { name: '台股大盤復盤' }));
 
     const dashboardScroll = screen.getByTestId('home-dashboard-scroll');
     const marketReviewReport = await screen.findByTestId('market-review-report');
@@ -1321,7 +1321,7 @@ describe('HomePage', () => {
 
     await screen.findByText('趋势维持强势');
 
-    fireEvent.click(screen.getByRole('button', { name: '大盘复盘' }));
+    fireEvent.click(screen.getByRole('button', { name: '台股大盤復盤' }));
 
     await waitFor(() => {
       expect(screen.getByText('大盘复盘已完成')).toBeInTheDocument();

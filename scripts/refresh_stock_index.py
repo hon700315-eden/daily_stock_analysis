@@ -76,7 +76,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 2
             _run([sys.executable, "scripts/fetch_tushare_stock_list.py", "--a-rk"])
 
-        _run([sys.executable, "scripts/generate_index_from_csv.py", "--source", "tushare"])
+        generate_command = [sys.executable, "scripts/generate_index_from_csv.py", "--source", "tushare"]
+        if args.skip_fetch:
+            generate_command.append("--reuse-existing-index")
+        _run(generate_command)
         _sync_static_index()
 
     except subprocess.CalledProcessError as exc:

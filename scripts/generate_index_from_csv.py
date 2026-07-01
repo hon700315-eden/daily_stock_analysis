@@ -83,12 +83,40 @@ def load_csv_data(csv_path: Path) -> List[Dict[str, Any]]:
     return stocks
 
 
-def load_tushare_data(data_dir: Path) -> List[Dict[str, Any]]:
+def load_existing_index_data(index_path: Path, market_name: str) -> List[Dict[str, Any]]:
+    """Load existing generated index rows for a market as an offline fallback."""
+    if not index_path.exists():
+        return []
+
+    try:
+        payload = json.loads(index_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"    [Warning] 讀取既有索引失敗：{exc}")
+        return []
+
+    stocks: List[Dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, list) or len(item) < 10:
+            continue
+        if item[6] != market_name:
+            continue
+        stocks.append({
+            'ts_code': item[0],
+            'symbol': item[1],
+            'name': item[2],
+            'market': item[6],
+            'aliases': item[5] if isinstance(item[5], list) else [],
+        })
+    return stocks
+
+
+def load_tushare_data(data_dir: Path, reuse_existing_index: bool = False) -> List[Dict[str, Any]]:
     """
     从 Tushare CSV 文件加载多市场股票数据
 
     Args:
         data_dir: 数据目录路径
+        reuse_existing_index: 缺少某市場 CSV 時是否沿用既有生成索引
 
     Returns:
         合并后的股票列表
@@ -96,6 +124,7 @@ def load_tushare_data(data_dir: Path) -> List[Dict[str, Any]]:
     all_stocks = []
     seed_dir = Path(__file__).parent / 'stock_index_seeds'
     default_data_dir = Path(__file__).parent.parent / 'data'
+    existing_index_path = Path(__file__).parent.parent / "apps" / "dsa-web" / "public" / "stocks.index.json"
     use_seed_fallback = data_dir.resolve() == default_data_dir.resolve()
 
     def _csv_path(file_name: str) -> Path:
@@ -114,6 +143,18 @@ def load_tushare_data(data_dir: Path) -> List[Dict[str, Any]]:
 
     for market_name, csv_file in market_files.items():
         if not csv_file.exists():
+            existing_market_stocks = (
+                load_existing_index_data(existing_index_path, market_name)
+                if reuse_existing_index
+                else []
+            )
+            if existing_market_stocks:
+                all_stocks.extend(existing_market_stocks)
+                print(
+                    f"[Warning] 未找到檔案：{csv_file}；"
+                    f"已沿用既有 {market_name} 索引 {len(existing_market_stocks)} 檔股票"
+                )
+                continue
             print(f"[Warning] 未找到文件：{csv_file}")
             continue
 
@@ -154,6 +195,31 @@ def load_tushare_data(data_dir: Path) -> List[Dict[str, Any]]:
             print(f"    [Error] 读取 {csv_file.name} 失败：{e}")
 
     return all_stocks
+
+
+def load_taiwan_snapshot_data() -> List[Dict[str, Any]]:
+    """Load Taiwan common stocks from the retained daily snapshot."""
+    try:
+        from src.data.taiwan_stock_index import get_taiwan_stock_index
+    except Exception as exc:
+        print(f"[Warning] 台股正式 snapshot 索引不可用：{exc}")
+        return []
+
+    stocks: List[Dict[str, Any]] = []
+    for record in get_taiwan_stock_index():
+        if not record.is_common_stock:
+            continue
+        aliases = [f"{record.exchange}:{record.code}"]
+        stocks.append({
+            'ts_code': record.symbol,
+            'symbol': record.code,
+            'name': record.name,
+            'market': 'TW',
+            'aliases': aliases,
+        })
+
+    print(f"    ✓ TW 市場正式 snapshot 讀取完成：{len(stocks)} 只普通股")
+    return stocks
 
 
 def get_us_delist_priority(row: Dict[str, str]) -> int:
@@ -443,6 +509,8 @@ def determine_market(ts_code: str) -> str:
             return 'JP'
         elif suffix in ['KS', 'KQ']:
             return 'KR'
+        elif suffix in ['TW', 'TWO']:
+            return 'TW'
         # 有后缀但不是中国市场后缀，检查是否为美股
         # 美股可能有点号后缀（如 BRK.B, GOOG.A, AAPL.U）
         prefix = ts_code.split('.')[0]
@@ -630,6 +698,11 @@ def main():
         action='store_true',
         help='测试模式：只验证不写入文件'
     )
+    parser.add_argument(
+        '--reuse-existing-index',
+        action='store_true',
+        help='缺少市場 CSV 時沿用既有生成索引，適合離線刷新保留現有市場資料'
+    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -644,7 +717,8 @@ def main():
     print("\n[1/5] 读取 CSV 数据...")
     if args.source == 'tushare':
         data_dir = Path(__file__).parent.parent / 'data'
-        stocks = load_tushare_data(data_dir)
+        stocks = load_tushare_data(data_dir, reuse_existing_index=args.reuse_existing_index)
+        stocks.extend(load_taiwan_snapshot_data())
     elif args.source == 'akshare':
         logs_dir = Path(__file__).parent.parent / 'logs'
         stocks = load_akshare_data(logs_dir)
