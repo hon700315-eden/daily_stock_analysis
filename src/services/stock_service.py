@@ -105,7 +105,7 @@ class StockService:
             return {
                 "stock_code": getattr(quote, "code", stock_code),
                 "stock_name": getattr(quote, "name", None),
-                "current_price": getattr(quote, "price", 0.0) or 0.0,
+                "current_price": getattr(quote, "price", None),
                 "change": getattr(quote, "change_amount", None),
                 "change_percent": getattr(quote, "change_pct", None),
                 "open": getattr(quote, "open_price", None),
@@ -122,8 +122,8 @@ class StockService:
             }
             
         except ImportError:
-            logger.warning("DataFetcherManager 未找到，使用占位数据")
-            return self._get_placeholder_quote(stock_code)
+            logger.warning("DataFetcherManager 未找到，未回傳占位行情")
+            return None
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}", exc_info=True)
             return None
@@ -236,28 +236,3 @@ class StockService:
                 "availability": "source_unavailable",
                 "indicators": {},
             }
-    
-    def _get_placeholder_quote(self, stock_code: str) -> Dict[str, Any]:
-        """
-        获取占位行情数据（用于测试）
-        
-        Args:
-            stock_code: 股票代码
-            
-        Returns:
-            占位行情数据
-        """
-        return {
-            "stock_code": stock_code,
-            "stock_name": f"股票{stock_code}",
-            "current_price": 0.0,
-            "change": None,
-            "change_percent": None,
-            "open": None,
-            "high": None,
-            "low": None,
-            "prev_close": None,
-            "volume": None,
-            "amount": None,
-            "update_time": datetime.now().isoformat(),
-        }

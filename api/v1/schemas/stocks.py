@@ -19,7 +19,7 @@ class StockQuote(BaseModel):
     
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
-    current_price: float = Field(..., description="当前价格")
+    current_price: Optional[float] = Field(None, description="目前價格；缺值時保留 null")
     change: Optional[float] = Field(None, description="涨跌额")
     change_percent: Optional[float] = Field(None, description="涨跌幅 (%)")
     open: Optional[float] = Field(None, description="开盘价")

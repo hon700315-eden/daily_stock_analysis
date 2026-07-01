@@ -497,7 +497,7 @@ def get_stock_quote(stock_code: str) -> StockQuote:
         return StockQuote(
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
-            current_price=result.get("current_price", 0.0),
+            current_price=result.get("current_price"),
             change=result.get("change"),
             change_percent=result.get("change_percent"),
             open=result.get("open"),

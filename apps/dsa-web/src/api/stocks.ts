@@ -15,7 +15,7 @@ export type ExtractFromImageResponse = {
 export type StockQuote = {
   stock_code: string;
   stock_name?: string | null;
-  current_price: number;
+  current_price: number | null;
   change?: number | null;
   change_percent?: number | null;
   open?: number | null;

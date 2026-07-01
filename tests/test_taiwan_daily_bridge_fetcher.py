@@ -10,6 +10,7 @@ from api.app import create_app
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher, map_tw_symbol
+from src.services.stock_service import StockService
 from src.data.taiwan_stock_index import clear_taiwan_stock_index_cache
 
 
@@ -518,3 +519,24 @@ def test_taiwan_quote_miss_does_not_call_china_realtime_provider(tmp_path, monke
 
     assert manager.get_realtime_quote("9999") is None
     assert china.quote_calls == []
+
+
+def test_行情服務保留缺失價格而非補零(monkeypatch) -> None:
+    class _Manager:
+        def get_realtime_quote(self, stock_code):
+            return UnifiedRealtimeQuote(
+                code=stock_code,
+                name="缺價測試",
+                source=RealtimeSource.FALLBACK,
+                market="us",
+                currency="USD",
+                data_quality="partial",
+                price=None,
+            )
+
+    monkeypatch.setattr("data_provider.base.DataFetcherManager", lambda: _Manager())
+
+    payload = StockService().get_realtime_quote("AAPL")
+
+    assert payload is not None
+    assert payload["current_price"] is None

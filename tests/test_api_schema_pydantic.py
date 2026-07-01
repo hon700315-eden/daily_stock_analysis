@@ -91,6 +91,12 @@ def test_schema_examples_remain_in_openapi_schema() -> None:
     assert quote_schema["example"]["source"] == "TaiwanDailyDataBridgeFetcher"
 
 
+def test_行情價格缺值允許保留空值() -> None:
+    quote = StockQuote(stock_code="2330.TW", current_price=None)
+
+    assert quote.current_price is None
+
+
 def test_portfolio_account_create_defaults_to_taiwan_market() -> None:
     request = PortfolioAccountCreateRequest(name="台股帳戶")
 
