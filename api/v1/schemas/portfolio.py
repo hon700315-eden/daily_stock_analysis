@@ -156,9 +156,9 @@ class PortfolioPositionItem(BaseModel):
     quantity: float
     avg_cost: float
     total_cost: float
-    last_price: float
-    market_value_base: float
-    unrealized_pnl_base: float
+    last_price: Optional[float] = None
+    market_value_base: Optional[float] = None
+    unrealized_pnl_base: Optional[float] = None
     unrealized_pnl_pct: Optional[float] = None
     valuation_currency: str
     price_source: str = "unknown"

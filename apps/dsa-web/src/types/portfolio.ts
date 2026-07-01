@@ -36,9 +36,9 @@ export interface PortfolioPositionItem {
   quantity: number;
   avgCost: number;
   totalCost: number;
-  lastPrice: number;
-  marketValueBase: number;
-  unrealizedPnlBase: number;
+  lastPrice: number | null;
+  marketValueBase: number | null;
+  unrealizedPnlBase: number | null;
   unrealizedPnlPct?: number | null;
   valuationCurrency: string;
   priceSource?: 'realtime_quote' | 'history_close' | 'missing' | string;

@@ -901,9 +901,9 @@ class PortfolioRepository:
                         quantity=float(item["quantity"]),
                         avg_cost=float(item["avg_cost"]),
                         total_cost=float(item["total_cost"]),
-                        last_price=float(item["last_price"]),
-                        market_value_base=float(item["market_value_base"]),
-                        unrealized_pnl_base=float(item["unrealized_pnl_base"]),
+                        last_price=float(item["last_price"] or 0.0),
+                        market_value_base=float(item["market_value_base"] or 0.0),
+                        unrealized_pnl_base=float(item["unrealized_pnl_base"] or 0.0),
                         valuation_currency=valuation_currency,
                     )
                 )
@@ -1086,9 +1086,9 @@ class PortfolioRepository:
                         quantity=float(item["quantity"]),
                         avg_cost=float(item["avg_cost"]),
                         total_cost=float(item["total_cost"]),
-                        last_price=float(item["last_price"]),
-                        market_value_base=float(item["market_value_base"]),
-                        unrealized_pnl_base=float(item["unrealized_pnl_base"]),
+                        last_price=float(item["last_price"] or 0.0),
+                        market_value_base=float(item["market_value_base"] or 0.0),
+                        unrealized_pnl_base=float(item["unrealized_pnl_base"] or 0.0),
                         valuation_currency=valuation_currency,
                     )
                 )

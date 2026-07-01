@@ -45,7 +45,18 @@ describe('portfolioFormat', () => {
     const missingPosition = { ...pricedPosition, priceAvailable: false, priceSource: 'missing' };
     expect(formatPositionPrice(missingPosition)).toBe('--');
     expect(formatPositionMoney(123, missingPosition)).toBe('--');
-    expect(getPositionPriceLabel(missingPosition)).toBe('缺价');
+    expect(getPositionPriceLabel(missingPosition)).toBe('缺價');
+
+    const nullValuationPosition = {
+      ...pricedPosition,
+      lastPrice: null,
+      marketValueBase: null,
+      unrealizedPnlBase: null,
+      priceAvailable: false,
+      priceSource: 'missing',
+    };
+    expect(formatPositionPrice(nullValuationPosition)).toBe('--');
+    expect(formatPositionMoney(nullValuationPosition.marketValueBase, nullValuationPosition)).toBe('--');
   });
 
   it('formats broker labels and CSV result variants', () => {

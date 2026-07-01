@@ -1102,9 +1102,9 @@ class PortfolioService:
                     "quantity": round(qty, 8),
                     "avg_cost": round(avg_cost, 8),
                     "total_cost": round(total_cost, 8),
-                    "last_price": round(float(last_price), 8),
-                    "market_value_base": round(market_base, 8),
-                    "unrealized_pnl_base": round(unrealized_base, 8),
+                    "last_price": round(float(last_price), 8) if price_info.is_available else None,
+                    "market_value_base": round(market_base, 8) if price_info.is_available else None,
+                    "unrealized_pnl_base": round(unrealized_base, 8) if price_info.is_available else None,
                     "unrealized_pnl_pct": round(unrealized_pct, 8) if unrealized_pct is not None else None,
                     "valuation_currency": account.base_currency,
                     "price_source": price_info.source,
@@ -1112,7 +1112,7 @@ class PortfolioService:
                     "price_date": price_info.price_date.isoformat() if price_info.price_date else None,
                     "price_stale": price_info.is_stale,
                     "price_available": price_info.is_available,
-                    "data_quality": "partial" if limitations else "ok",
+                    "data_quality": "partial" if limitations or not price_info.is_available else "ok",
                     "limitations": limitations,
                 }
             )

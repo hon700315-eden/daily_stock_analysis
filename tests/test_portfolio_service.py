@@ -376,14 +376,20 @@ class PortfolioServiceTestCase(unittest.TestCase):
             )
 
         pos = snapshot["accounts"][0]["positions"][0]
-        self.assertEqual(pos["last_price"], 0.0)
-        self.assertEqual(pos["market_value_base"], 0.0)
-        self.assertEqual(pos["unrealized_pnl_base"], 0.0)
+        self.assertIsNone(pos["last_price"])
+        self.assertIsNone(pos["market_value_base"])
+        self.assertIsNone(pos["unrealized_pnl_base"])
         self.assertEqual(pos["price_source"], "missing")
         self.assertFalse(pos["price_available"])
         self.assertTrue(pos["price_stale"])
         self.assertEqual(snapshot["accounts"][0]["total_market_value"], 0.0)
         self.assertEqual(snapshot["accounts"][0]["unrealized_pnl"], 0.0)
+
+        with self.db.get_session() as session:
+            cached = session.execute(select(PortfolioPosition).limit(1)).scalar_one()
+            self.assertEqual(cached.last_price, 0.0)
+            self.assertEqual(cached.market_value_base, 0.0)
+            self.assertEqual(cached.unrealized_pnl_base, 0.0)
 
     def test_snapshot_fifo_vs_avg_on_partial_sell(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -575,9 +581,9 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertIsNone(missing["price_date"])
         self.assertTrue(missing["price_stale"])
         self.assertFalse(missing["price_available"])
-        self.assertAlmostEqual(missing["last_price"], 0.0, places=6)
-        self.assertAlmostEqual(missing["market_value_base"], 0.0, places=6)
-        self.assertAlmostEqual(missing["unrealized_pnl_base"], 0.0, places=6)
+        self.assertIsNone(missing["last_price"])
+        self.assertIsNone(missing["market_value_base"])
+        self.assertIsNone(missing["unrealized_pnl_base"])
         self.assertIsNone(missing["unrealized_pnl_pct"])
 
     def test_build_positions_handles_zero_cost_without_division(self) -> None:
@@ -594,7 +600,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(len(positions), 1)
         self.assertEqual(positions[0]["price_source"], "missing")
         self.assertIsNone(positions[0]["unrealized_pnl_pct"])
-        self.assertAlmostEqual(positions[0]["last_price"], 0.0, places=6)
+        self.assertIsNone(positions[0]["last_price"])
 
     def test_symbol_filter_matches_legacy_prefix_suffix_variants(self) -> None:
         account = self.service.create_account(name="Legacy", broker="Demo", market="cn", base_currency="CNY")

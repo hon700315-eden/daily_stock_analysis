@@ -1231,7 +1231,7 @@ const PortfolioPage: React.FC = () => {
                       <td
                         className={`py-2 pr-3 text-right ${
                           hasPositionPrice(row)
-                            ? row.unrealizedPnlBase >= 0
+                            ? (row.unrealizedPnlBase ?? 0) >= 0
                               ? 'text-success'
                               : 'text-danger'
                             : 'text-secondary'

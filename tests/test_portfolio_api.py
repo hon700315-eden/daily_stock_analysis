@@ -223,6 +223,44 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(position["data_quality"], "partial")
         self.assertIn("realtime_quote_best_effort", position["limitations"])
 
+    def test_snapshot_missing_price_fields_are_null(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "tw", "base_currency": "TWD"},
+        )
+        self.assertEqual(create_resp.status_code, 200, create_resp.text)
+        account_id = create_resp.json()["id"]
+
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "2330.TW",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "fee": 0,
+                "tax": 0,
+                "market": "tw",
+                "currency": "TWD",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200, trade_resp.text)
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-03"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200, snapshot_resp.text)
+        position = snapshot_resp.json()["accounts"][0]["positions"][0]
+
+        self.assertEqual(position["price_source"], "missing")
+        self.assertFalse(position["price_available"])
+        self.assertIsNone(position["last_price"])
+        self.assertIsNone(position["market_value_base"])
+        self.assertIsNone(position["unrealized_pnl_base"])
+
     def test_delete_account_deactivates_without_hard_deleting(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",

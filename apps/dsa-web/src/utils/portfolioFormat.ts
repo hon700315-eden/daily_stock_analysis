@@ -45,16 +45,16 @@ export function hasPositionPrice(row: PortfolioPositionItem): boolean {
 
 export function formatPositionPrice(row: PortfolioPositionItem): string {
   if (!hasPositionPrice(row)) return '--';
-  return row.lastPrice.toFixed(4);
+  return row.lastPrice == null ? '--' : row.lastPrice.toFixed(4);
 }
 
-export function formatPositionMoney(value: number, row: PortfolioPositionItem): string {
+export function formatPositionMoney(value: number | null | undefined, row: PortfolioPositionItem): string {
   if (!hasPositionPrice(row)) return '--';
   return formatMoney(value, row.valuationCurrency);
 }
 
 export function getPositionPriceLabel(row: PortfolioPositionItem): string {
-  if (!hasPositionPrice(row)) return '缺价';
+  if (!hasPositionPrice(row)) return '缺價';
   if (row.priceSource === 'realtime_quote') {
     return row.priceProvider ? `实时价 · ${row.priceProvider}` : '实时价';
   }
