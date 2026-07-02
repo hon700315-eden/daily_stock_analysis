@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 - [新功能] 接通上游台股正式日更 artifact 下載與嚴格 readback 驗證，每日分析 workflow 在正式資料不可用時直接失敗且不 fallback 中國市場。
+- [修復] 修正跨 Repository 台股正式 artifact 下載不相容 `gh api --output` 的問題，改由 stdout 二進位串流寫入 ZIP 並保留 fail-closed 驗證。
 - [改進] 收斂每日分析 workflow 的台股預設股票、台北時區顯示、STOCK_LIST precedence 與上游 artifact 授權文件。
 - [修復] 修正股票行情 API 缺值補零與 `.env.example` 大盤復盤市場範例不一致問題。
 - [測試] 新增台股日更正式資料只讀 readback smoke，驗證 manifest、package、TWSE/TPEX、行情、history、technical 與缺碼不 fallback 中國市場。
