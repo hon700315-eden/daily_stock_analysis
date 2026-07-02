@@ -221,7 +221,7 @@ class HistoryService:
             
         except Exception as e:
             logger.error(f"查询历史列表失败: {e}", exc_info=True)
-            return {"total": 0, "items": []}
+            raise
 
     @staticmethod
     def _safe_float(value: Any) -> Optional[float]:

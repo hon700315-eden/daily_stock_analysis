@@ -155,7 +155,7 @@ def _warn_if_open_cors_without_auth() -> None:
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
-from api.v1.schemas.common import HealthResponse
+from api.v1.schemas.common import HealthResponse, ReadinessResponse
 from src.auth import is_auth_enabled
 from src.data.stock_index_loader import find_existing_stock_index_path
 from src.services.system_config_service import SystemConfigService
@@ -172,6 +172,7 @@ from src.services.stock_index_remote_service import (
     refresh_remote_stock_index_cache,
     settings_from_config,
 )
+from src.services.database_runtime import inspect_analysis_database
 
 
 _STOCK_INDEX_FILENAME = "stocks.index.json"
@@ -435,6 +436,32 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         return HealthResponse(
             status="ok",
             timestamp=datetime.now().isoformat()
+        )
+
+    @app.get(
+        "/ready",
+        response_model=ReadinessResponse,
+        tags=["Health"],
+        summary="資料 readiness",
+        description="檢查 SQLite DB 與分析歷史資料是否可用，與 process health 分離",
+    )
+    @app.get(
+        "/api/ready",
+        response_model=ReadinessResponse,
+        tags=["Health"],
+        summary="資料 readiness",
+        description="檢查 SQLite DB 與分析歷史資料是否可用，與 process health 分離",
+    )
+    async def readiness_check(response: Response) -> ReadinessResponse:
+        db_status = inspect_analysis_database()
+        if not db_status.database_ready:
+            response.status_code = 503
+        return ReadinessResponse(
+            status=db_status.status,
+            timestamp=datetime.now().isoformat(),
+            database_ready=db_status.database_ready,
+            history_available=db_status.history_available,
+            reason=db_status.reason,
         )
 
     def _stock_index_candidate_paths() -> tuple[Path, ...]:

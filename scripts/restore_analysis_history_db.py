@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Sequence
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 REQUIRED_ANALYSIS_HISTORY_COLUMNS = {
     "id",
     "query_id",
@@ -156,8 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         type=Path,
-        default=Path("data/stock_analysis.db"),
-        help="目標 DB 路徑，預設為 data/stock_analysis.db",
+        default=REPO_ROOT / "data" / "stock_analysis.db",
+        help="目標 DB 路徑，預設為 repository root 下的 data/stock_analysis.db",
     )
     parser.add_argument(
         "--allow-empty-history",

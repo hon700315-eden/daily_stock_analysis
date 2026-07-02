@@ -227,8 +227,23 @@ SQLite `data/stock_analysis.db` 的 `analysis_history` 表；API 的
 `created_at`。交易日期與資料品質主要保存在
 `context_snapshot.enhanced_context.date`、`market_phase_summary` 與
 `analysis_context_pack_overview`；現有正式表結構沒有獨立 `schema_version`
-欄位。分析失敗時不寫入 `analysis_history` 假成功記錄，API 查無歷史時依既有
-404 或空列表契約回應。
+欄位。分析失敗時不寫入 `analysis_history` 假成功記錄。
+
+正式 DB 路徑由 `DATABASE_PATH` 決定。本機預設值是
+`./data/stock_analysis.db`，相對路徑固定解析到 repository root，不依賴 API
+process 的 current working directory；Docker 預設值是
+`/app/data/stock_analysis.db`，compose 透過 `../data:/app/data` 保留同一資料卷。
+每日 workflow 上傳與 restore script 的預設目標同樣對齊
+`data/stock_analysis.db`。測試可用 temporary DB 覆蓋 `DATABASE_PATH`，但不能把
+temporary DB 宣告為正式資料。
+
+API 的 process health 與資料 readiness 分開處理：`/health`、`/api/health` 與
+`/api/v1/health` 只代表 API process 存活；`/ready`、`/api/ready` 與
+`/api/v1/ready` 會以唯讀 SQLite 連線檢查 DB 是否存在、integrity 是否為
+`ok`、`analysis_history` 表與必要欄位是否存在。`analysis_history` 為空時
+database readiness 可降級通過，但 history availability 必須明確標示為
+unavailable；`/api/v1/history` 會回 HTTP 503 與 `history_unavailable`，不得把空
+DB、缺表或 malformed DB 回成成功的空列表。
 
 GitHub Actions runner 的本機 SQLite 會隨 runner 消失，因此每日 workflow 的
 `analysis-reports-*` artifact 現在一併保留 `data/stock_analysis.db`、`reports/`
@@ -243,7 +258,9 @@ artifact 前，不宣告遠端每日分析端到端已完成。
 ./.venv/bin/python scripts/restore_analysis_history_db.py <artifact-dir-or-db> --target data/stock_analysis.db
 ```
 
-還原入口會先以唯讀 SQLite 連線執行 `PRAGMA integrity_check`，確認
+未傳 `--target` 時，restore script 也會使用 repository root 下的
+`data/stock_analysis.db`。還原入口會先以唯讀 SQLite 連線執行
+`PRAGMA integrity_check`，確認
 `analysis_history` 表、既有欄位契約與非空歷史資料，通過後才把來源 DB 複製到
 目標同目錄暫存檔並以 `os.replace` 原子替換。驗證失敗、DB 損壞、缺表、缺欄位
 或空歷史資料時會非零退出，且保留既有目標 DB。這只驗證每日分析 artifact 中的

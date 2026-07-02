@@ -43,6 +43,7 @@ from src.report_language import (
     normalize_report_language,
 )
 from src.services.history_service import HistoryService, MarkdownReportGenerationError
+from src.services.database_runtime import inspect_analysis_database
 from src.schemas.decision_action import build_action_fields
 from src.utils.data_processing import (
     normalize_model_used,
@@ -117,6 +118,7 @@ def _coalesce_int(*values: Any) -> Optional[int]:
     response_model=HistoryListResponse,
     responses={
         200: {"description": "历史记录列表"},
+        503: {"description": "分析歷史資料目前不可用", "model": ErrorResponse},
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史分析列表",
@@ -129,7 +131,6 @@ def get_history_list(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> HistoryListResponse:
     """
     获取历史分析列表
@@ -143,13 +144,23 @@ def get_history_list(
         end_date: 结束日期
         page: 页码
         limit: 每页数量
-        db_manager: 数据库管理器依赖
         
     Returns:
         HistoryListResponse: 历史记录列表
     """
+    db_status = inspect_analysis_database(require_history_rows=True)
+    if not db_status.database_ready or not db_status.history_available:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "history_unavailable",
+                "message": "分析歷史資料目前不可用",
+                "reason": db_status.reason,
+            },
+        )
+
     try:
-        service = HistoryService(db_manager)
+        service = HistoryService(DatabaseManager.get_instance())
         
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_list(

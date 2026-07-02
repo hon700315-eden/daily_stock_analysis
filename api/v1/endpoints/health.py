@@ -11,9 +11,10 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 
-from api.v1.schemas.common import HealthResponse
+from api.v1.schemas.common import HealthResponse, ReadinessResponse
+from src.services.database_runtime import inspect_analysis_database
 
 router = APIRouter()
 
@@ -31,4 +32,23 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="ok",
         timestamp=datetime.now().isoformat()
+    )
+
+
+@router.get("/ready", response_model=ReadinessResponse)
+async def readiness_check(response: Response) -> ReadinessResponse:
+    """
+    資料服務 readiness。
+
+    與 process health 分離：API process 存活不代表正式 SQLite 分析歷史可用。
+    """
+    db_status = inspect_analysis_database()
+    if not db_status.database_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return ReadinessResponse(
+        status=db_status.status,
+        timestamp=datetime.now().isoformat(),
+        database_ready=db_status.database_ready,
+        history_available=db_status.history_available,
+        reason=db_status.reason,
     )

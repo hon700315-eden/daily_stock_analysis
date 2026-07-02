@@ -42,6 +42,26 @@ class HealthResponse(BaseModel):
     })
 
 
+class ReadinessResponse(BaseModel):
+    """資料服務 readiness 響應"""
+
+    status: str = Field(..., description="readiness 狀態")
+    timestamp: Optional[str] = Field(None, description="時間戳")
+    database_ready: bool = Field(..., description="SQLite DB 是否可讀且 schema 完整")
+    history_available: bool = Field(..., description="analysis_history 是否有可用歷史資料")
+    reason: Optional[str] = Field(None, description="不可用或降級原因")
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "status": "ok",
+            "timestamp": "2024-01-01T12:00:00",
+            "database_ready": True,
+            "history_available": True,
+            "reason": None,
+        }
+    })
+
+
 class ErrorResponse(BaseModel):
     """错误响应"""
     
