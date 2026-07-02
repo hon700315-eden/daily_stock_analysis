@@ -236,6 +236,19 @@ GitHub Actions runner 的本機 SQLite 會隨 runner 消失，因此每日 workf
 分析格式，也不改 H4 上游 artifact 契約。H4-R1 尚未等到 H4 基準後正式交易日
 artifact 前，不宣告遠端每日分析端到端已完成。
 
+若要把已下載或已解壓的每日分析 artifact 還原到新的 API runtime 或部署環境，
+使用既有 SQLite 目標路徑，不建立第二套資料庫：
+
+```bash
+./.venv/bin/python scripts/restore_analysis_history_db.py <artifact-dir-or-db> --target data/stock_analysis.db
+```
+
+還原入口會先以唯讀 SQLite 連線執行 `PRAGMA integrity_check`，確認
+`analysis_history` 表、既有欄位契約與非空歷史資料，通過後才把來源 DB 複製到
+目標同目錄暫存檔並以 `os.replace` 原子替換。驗證失敗、DB 損壞、缺表、缺欄位
+或空歷史資料時會非零退出，且保留既有目標 DB。這只驗證每日分析 artifact 中的
+DSA runtime DB；不修改 Google Drive 正式資料，也不改 H4 上游 artifact 契約。
+
 ## Upstream Contract
 
 This bridge is read-only. It does not modify `TW_Stock_Dashboard_Clean`, its L2,
