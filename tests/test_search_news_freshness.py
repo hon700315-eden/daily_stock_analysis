@@ -4,6 +4,9 @@ Unit tests for strict news freshness filtering and strategy window logic (Issue 
 """
 
 import sys
+import os
+import subprocess
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -72,6 +75,32 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         )
         service._providers[0].search = mock_search
         return service, mock_search
+
+    def _capture_serpapi_news_query(self, stock_code: str, stock_name: str) -> str:
+        fresh = datetime.now().date().isoformat()
+        provider = SerpAPISearchProvider(["dummy_key"])
+        provider._do_search = MagicMock(
+            return_value=_response([
+                _result(
+                    f"{stock_name} {stock_code} 今日新聞",
+                    fresh,
+                    snippet="台股最新消息",
+                    source="tw.example.com",
+                )
+            ])
+        )
+        service = SearchService(
+            serpapi_keys=["dummy_key"],
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        service._providers = [provider]
+
+        response = service.search_stock_news(stock_code, stock_name, max_results=1)
+
+        self.assertTrue(response.success)
+        return provider._do_search.call_args.args[0]
 
     def test_effective_window_uses_profile_and_news_max_age(self) -> None:
         """window = min(profile_days, NEWS_MAX_AGE_DAYS)."""
@@ -157,38 +186,86 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         mock_resolver.assert_any_call("TPEX:6488")
         mock_resolver.assert_any_call("2026")
 
-    def test_taiwan_prefixed_stock_news_uses_canonical_query_code(self) -> None:
-        """TWSE/TPEX 前綴輸入應與 suffix / 裸碼走同一台股查詢語境。"""
-        fresh = datetime.now().date().isoformat()
-        provider = SerpAPISearchProvider(["dummy_key"])
-        provider._do_search = MagicMock(
-            return_value=_response([
-                _result(
-                    "台積電 2330.TW 今日新聞",
-                    fresh,
-                    snippet="TWSE:2330 台股最新消息",
-                    source="tw.example.com",
-                )
-            ])
+    def test_taiwan_explicit_stock_news_uses_canonical_suffix_query_code(self) -> None:
+        """台股 explicit suffix/prefix 輸入應穩定收斂為 Yahoo suffix 查詢代碼。"""
+        cases = (
+            ("2330.TW", "台積電", "2330.TW", "TWSE:2330"),
+            ("TWSE:2330", "台積電", "2330.TW", "TWSE:2330"),
+            ("6488.TWO", "環球晶", "6488.TWO", "TPEX:6488"),
+            ("TPEX:6488", "環球晶", "6488.TWO", "TPEX:6488"),
         )
-        service = SearchService(
-            serpapi_keys=["dummy_key"],
-            searxng_public_instances_enabled=False,
-            news_max_age_days=3,
-            news_strategy_profile="short",
-        )
-        service._providers = [provider]
+        for stock_code, stock_name, expected_code, rejected_code in cases:
+            with self.subTest(stock_code=stock_code):
+                actual_query = self._capture_serpapi_news_query(stock_code, stock_name)
+                self.assertIn(expected_code, actual_query)
+                self.assertNotIn(rejected_code, actual_query)
+                self.assertIn("台股", actual_query)
+                self.assertIn("台灣", actual_query)
+                self.assertNotIn("上交所", actual_query)
+                self.assertNotIn("深交所", actual_query)
+                self.assertNotIn("cninfo", actual_query.lower())
+                self.assertNotIn("A股", actual_query)
+                self.assertNotIn("人民幣", actual_query)
 
-        response = service.search_stock_news("TWSE:2330", "台積電", max_results=1)
+    def test_taiwan_news_query_normalizes_explicit_codes_without_snapshot_in_subprocess(self) -> None:
+        """接近 GitHub runner 的無 Drive 新 process 仍須穩定處理 explicit 台股格式。"""
+        script = r"""
+from datetime import datetime
+from unittest.mock import MagicMock
+from src.data.taiwan_stock_index import resolve_taiwan_stock_symbol, _clear_taiwan_stock_index_cache_for_tests
+from src.search_service import SearchResponse, SearchResult, SearchService, SerpAPISearchProvider
 
-        self.assertTrue(response.success)
-        actual_query = provider._do_search.call_args.args[0]
-        self.assertIn("2330.TW", actual_query)
-        self.assertIn("台股", actual_query)
-        self.assertIn("台灣", actual_query)
-        self.assertNotIn("上交所", actual_query)
-        self.assertNotIn("深交所", actual_query)
-        self.assertNotIn("cninfo", actual_query.lower())
+_clear_taiwan_stock_index_cache_for_tests()
+fresh = datetime.now().date().isoformat()
+provider = SerpAPISearchProvider(["dummy_key"])
+provider._do_search = MagicMock(return_value=SearchResponse(
+    query="test",
+    results=[SearchResult(title="hit", snippet="snippet", url="https://example.com", source="example", published_date=fresh)],
+    provider="Mock",
+    success=True,
+))
+service = SearchService(
+    serpapi_keys=["dummy_key"],
+    searxng_public_instances_enabled=False,
+    news_max_age_days=3,
+    news_strategy_profile="short",
+)
+service._providers = [provider]
+
+for raw in ["2330.TW", "TWSE:2330", "2330", "6488.TWO", "TPEX:6488", "6488"]:
+    print(f"resolver {raw}={resolve_taiwan_stock_symbol(raw)!r}")
+
+for raw, name in [("2330.TW", "台積電"), ("TWSE:2330", "台積電"), ("6488.TWO", "環球晶"), ("TPEX:6488", "環球晶")]:
+    provider._do_search.reset_mock()
+    service.search_stock_news(raw, name, max_results=1)
+    print(f"query {raw}={provider._do_search.call_args.args[0]}")
+"""
+        with tempfile.TemporaryDirectory() as missing_root:
+            env = os.environ.copy()
+            env["TW_STOCK_INDEX_ROOT"] = os.path.join(missing_root, "missing")
+            env["TW_STOCK_DATA_ROOT"] = os.path.join(missing_root, "missing")
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=os.getcwd(),
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+
+        output = result.stdout
+        self.assertIn("resolver 2330.TW='2330.TW'", output)
+        self.assertIn("resolver TWSE:2330='2330.TW'", output)
+        self.assertIn("resolver 2330=None", output)
+        self.assertIn("resolver 6488.TWO='6488.TWO'", output)
+        self.assertIn("resolver TPEX:6488='6488.TWO'", output)
+        self.assertIn("resolver 6488=None", output)
+        self.assertIn("query 2330.TW=台積電 2330.TW 台股 最新消息 台灣", output)
+        self.assertIn("query TWSE:2330=台積電 2330.TW 台股 最新消息 台灣", output)
+        self.assertIn("query 6488.TWO=環球晶 6488.TWO 台股 最新消息 台灣", output)
+        self.assertIn("query TPEX:6488=環球晶 6488.TWO 台股 最新消息 台灣", output)
+        self.assertNotIn("query TWSE:2330=台積電 TWSE:2330 股票 最新消息", output)
+        self.assertNotIn("query TPEX:6488=環球晶 TPEX:6488 股票 最新消息", output)
 
     def test_search_stock_news_strict_filters(self) -> None:
         """Drop old/unknown/future+2, keep future+1 and within-window dates."""

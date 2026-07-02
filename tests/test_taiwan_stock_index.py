@@ -98,9 +98,11 @@ def test_search_defaults_to_common_stocks_and_can_include_excluded(taiwan_snapsh
 def test_taiwan_normalization_is_shared_by_services(taiwan_snapshot) -> None:
     assert resolve_taiwan_stock_symbol("2330") == "2330.TW"
     assert resolve_taiwan_stock_symbol("2330.TW") == "2330.TW"
+    assert resolve_taiwan_stock_symbol("TWSE:2330") == "2330.TW"
     assert resolve_taiwan_stock_symbol("2330.TW.TW") is None
     assert resolve_taiwan_stock_symbol("6488") == "6488.TWO"
     assert resolve_taiwan_stock_symbol("6488.TWO") == "6488.TWO"
+    assert resolve_taiwan_stock_symbol("TPEX:6488") == "6488.TWO"
 
     assert normalize_code("TWSE:2330") == "2330.TW"
     assert normalize_code("TPEX:6488") == "6488.TWO"
@@ -136,3 +138,17 @@ def test_api_search_and_quote_use_same_taiwan_symbol(taiwan_snapshot, tmp_path) 
     assert quote["stock_code"] == "2330.TW"
     assert quote["stock_name"] == "台積電"
     assert quote["current_price"] == 2370.0
+
+
+def test_explicit_taiwan_symbols_normalize_without_snapshot_index(tmp_path, monkeypatch) -> None:
+    missing_root = tmp_path / "missing"
+    monkeypatch.setenv("TW_STOCK_INDEX_ROOT", str(missing_root))
+    monkeypatch.setenv("TW_STOCK_DATA_ROOT", str(missing_root))
+    _clear_taiwan_stock_index_cache_for_tests()
+
+    assert resolve_taiwan_stock_symbol("2330.TW") == "2330.TW"
+    assert resolve_taiwan_stock_symbol("TWSE:2330") == "2330.TW"
+    assert resolve_taiwan_stock_symbol("6488.TWO") == "6488.TWO"
+    assert resolve_taiwan_stock_symbol("TPEX:6488") == "6488.TWO"
+    assert resolve_taiwan_stock_symbol("2330") is None
+    assert resolve_taiwan_stock_symbol("6488") is None

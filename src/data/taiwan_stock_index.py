@@ -320,6 +320,16 @@ def resolve_taiwan_stock_symbol(query: str, *, include_excluded: bool = False) -
     if not text:
         return None
 
+    explicit = _parse_explicit_symbol(text)
+    if explicit is not None:
+        market, code = explicit
+        return map_tw_symbol(market, code)
+
+    prefixed = _parse_prefixed_code(text)
+    if prefixed is not None:
+        market, code = prefixed
+        return map_tw_symbol(market, code)
+
     records = search_taiwan_stocks(text, limit=2, include_excluded=include_excluded)
     if not records:
         return None
