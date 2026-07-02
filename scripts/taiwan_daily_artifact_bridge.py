@@ -96,23 +96,25 @@ def _select_artifact(artifacts: list[dict[str, Any]], prefix: str) -> dict[str, 
 def _download_artifact(repo: str, artifact: dict[str, Any], output_root: Path) -> Path:
     archive = output_root / f"{artifact['name']}.zip"
     output_root.mkdir(parents=True, exist_ok=True)
-    completed = subprocess.run(
-        [
-            "gh",
-            "api",
-            f"repos/{repo}/actions/artifacts/{artifact['id']}/zip",
-            "--output",
-            str(archive),
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    archive_endpoint = f"repos/{repo}/actions/artifacts/{artifact['id']}/zip"
+    with archive.open("wb") as output:
+        completed = subprocess.run(
+            ["gh", "api", archive_endpoint],
+            stdout=output,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
     if completed.returncode != 0:
-        message = (completed.stderr or completed.stdout or "").strip()
+        archive.unlink(missing_ok=True)
+        stderr = completed.stderr or b""
+        message = stderr.decode("utf-8", errors="replace").strip()
         raise ArtifactBridgeError(f"下載上游 artifact 失敗：{message}")
     if not archive.is_file() or archive.stat().st_size <= 0:
+        archive.unlink(missing_ok=True)
         raise ArtifactBridgeError("下載後的上游 artifact 是空檔")
+    if not zipfile.is_zipfile(archive):
+        archive.unlink(missing_ok=True)
+        raise ArtifactBridgeError("下載後的上游 artifact 不是有效 ZIP")
     extract_dir = output_root / str(artifact["name"])
     if extract_dir.exists():
         shutil.rmtree(extract_dir)
