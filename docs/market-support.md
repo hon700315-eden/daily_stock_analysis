@@ -89,34 +89,34 @@ PY
 
 回滚方式：从 `MARKET_REVIEW_REGION` 合法值、Web 设置枚举、MarketProfile/MarketStrategy、`_MARKET_REVIEW_MARKETS` 和本文档中移除 `jp` / `kr`。
 
-## 台湾个股 suffix-only MVP（Issue #1772，Refs #1772）
+## 台灣個股 suffix-only MVP（Issue #1772，Refs #1772）
 
-当前阶段支持手动输入台湾股票的 Yahoo Finance 后缀代码，进入既有个股分析、历史保存和基础报告展示链路。TWSE 上市股票使用 `.TW` 后缀，TPEx 上柜（柜买）股票使用 `.TWO` 后缀，二者折叠为同一 `tw` 市场标签。**本次覆盖市场识别（detection）、数据路由层、DecisionSignal/Portfolio/Intelligence 服务层与 API 市场枚举，以及 DecisionSignal/Portfolio 前端市场类型与筛选**；台股股票索引/种子、Web 自动补全与告警（大盘红绿灯）市场放行仍作为后续 PR。对齐 #1718 日韩 MVP 模式。
+目前階段支援手動輸入台灣股票的 Yahoo Finance 後綴代碼，進入既有個股分析、歷史保存和基礎報告展示鏈路。TWSE 上市股票使用 `.TW` 後綴，TPEx 上櫃股票使用 `.TWO` 後綴，二者折疊為同一 `tw` 市場標籤。現有台股正式 snapshot 索引、API 股票搜尋與 Web 自動完成已經接通；裸碼或中文名只有在正式索引中能唯一命中 TWSE/TPEX 記錄時才會收斂為 `.TW`/`.TWO`。**本次覆蓋市場識別（detection）、資料路由層、DecisionSignal/Portfolio/Intelligence 服務層與 API 市場 enum，以及 DecisionSignal/Portfolio 前端市場型別與篩選**。對齊 #1718 日韓 MVP 模式。
 
-支持格式：
+支援格式：
 
 - 上市（TWSE）：`2330.TW`、`0050.TW`
-- 上柜（TPEx / 柜买）：`6488.TWO`、`5483.TWO`
-- 代码 base 为 4-6 位数字（普通股 4 位，ETF/其他至 6 位，如 `00878.TW`、`006208.TW`），较日股 `.T` 的 4-5 位更宽。
+- 上櫃（TPEx / 櫃買）：`6488.TWO`、`5483.TWO`
+- 代碼 base 為 4-6 位數字（普通股 4 位，ETF/其他至 6 位，如 `00878.TW`、`006208.TW`），較日股 `.T` 的 4-5 位更寬。
 
-约束与边界：
+約束與邊界：
 
-- **严格 suffix-only**：裸 `2330`、`00878` 等不带后缀的代码不会进入台股语义（`detect_market` / `get_market_for_stock` 仅在显式 `.TW`/`.TWO` 后缀时返回 `tw`）。本次**不引入任何台股股票索引/种子解析**，故裸码不可能经本地/远程股票池被改写为台股 suffix；该索引解析（与 jp/kr 同款的裸码命中行为）属后续 PR。
-- 台股日线和基础实时/近实时行情只走 `YfinanceFetcher`，不尝试 AkShare、Tushare、Efinance、Pytdx、Baostock 等 A 股专属数据源。
-- 基本面复用既有 offshore yfinance 轻量路径；A 股专属资金流、龙虎榜、板块等能力按 `not_supported` 降级。
-- 报告 Prompt 已增加台股市场语义（新台币、三大法人、TWSE/TPEx ±10% 涨跌停），避免套用 A 股北向资金、龙虎榜等概念。
-- 交易日历注册 `tw: XTAI / Asia/Taipei`。TWSE 为 09:00–13:30 连续交易、无午休；收盘集合竞价暂不建模，与 jp/kr 一致。若本地 `exchange-calendars` 版本缺少对应日历，既有 fail-open/fail-closed 语义保持不变。
-- 主要指数提供加权指数 `^TWII` 与柜买指数 `^TWOII`。
-- 三大法人买卖超（institutional flows）资料层：`TwInstitutionalFetcher`（`data_provider/tw_institutional_fetcher.py`）提供上市（TWSE T86，legacy `rwd` 端点）/ 上柜（TPEx OpenAPI）每日外资·投信·自营商·三大法人买卖超（单位：**股数**；按日期+市场做单日全市场缓存再过滤个股，TPEx 民国年转西元有单测覆盖）。接口失败/限流/空响应/字段缺失一律 **fail-open** 返回无数据，不中断分析；仅对 `.TW`/`.TWO` 生效，不改动现有市场流程。资料来源为政府开放资料，采「政府资料开放授权条款第 1 版」(OGDL v1，允许商用与再散布，需标示来源)。**本次仅资料层 fetcher/parser/cache/tests，尚未接入报告展示、Web 展示、评分权重或 `capital_flow_signal` 派生。**
+- `detect_market` / `get_market_for_stock` 對顯式 `.TW`/`.TWO` 後綴返回 `tw`；裸 `2330`、`6488` 等輸入需先由正式台股索引、API 搜尋或 Web 自動完成解析成 `2330.TW`、`6488.TWO`，不能在無正式索引證據時猜測交易所。
+- 台股日線和基礎即時/近即時行情只走 `YfinanceFetcher`，不嘗試 AkShare、Tushare、Efinance、Pytdx、Baostock 等 A 股專屬資料源。
+- 基本面複用既有 offshore yfinance 輕量路徑；A 股專屬資金流、龍虎榜、板塊等能力按 `not_supported` 降級。
+- 報告 Prompt 已增加台股市場語意（新台幣、三大法人、TWSE/TPEx ±10% 漲跌停），避免套用 A 股北向資金、龍虎榜等概念。
+- 交易日曆註冊 `tw: XTAI / Asia/Taipei`。TWSE 為 09:00-13:30 連續交易、無午休；收盤集合競價暫不建模，與 jp/kr 一致。若本地 `exchange-calendars` 版本缺少對應日曆，既有 fail-open/fail-closed 語意保持不變。
+- 主要指數提供加權指數 `^TWII` 與櫃買指數 `^TWOII`。
+- 三大法人買賣超（institutional flows）資料層：`TwInstitutionalFetcher`（`data_provider/tw_institutional_fetcher.py`）提供上市（TWSE T86，legacy `rwd` 端點）/ 上櫃（TPEx OpenAPI）每日外資、投信、自營商、三大法人買賣超（單位：**股數**；按日期+市場做單日全市場快取再過濾個股，TPEx 民國年轉西元有單測覆蓋）。介面失敗/限流/空回應/欄位缺失一律 **fail-open** 回傳無資料，不中斷分析；僅對 `.TW`/`.TWO` 生效，不改動現有市場流程。資料來源為政府開放資料，採「政府資料開放授權條款第 1 版」(OGDL v1，允許商用與再散布，需標示來源)。**本次僅資料層 fetcher/parser/cache/tests，尚未接入報告展示、Web 展示、評分權重或 `capital_flow_signal` 派生。**
 
-不承诺项：
+不承諾項：
 
-- 不承诺实时行情；Yahoo Finance 数据可能延迟或字段缺失。
-- 不承诺完整基本面、行业/板块、市场宽度、涨跌家数或台股大盘复盘。
-- 台股股票索引/种子、Web 自动补全与告警（大盘红绿灯）市场放行仍作为后续 PR；告警 MarketRegion 与后端 market_light 仍为 cn/hk/us，未含 tw。
-- 不补齐 Portfolio 的 TWD 汇率、成本、市值完整口径（属上述后续 PR 范围）。
+- 不承諾即時行情；Yahoo Finance 資料可能延遲或欄位缺失。
+- 不承諾完整基本面、產業/板塊、市場寬度、漲跌家數或台股大盤復盤。
+- 告警（大盤紅綠燈）市場放行仍作為後續 PR；告警 MarketRegion 與後端 market_light 仍為 cn/hk/us，未含 tw。
+- 不補齊 Portfolio 的 TWD 匯率、成本、市值完整口徑（屬上述後續 PR 範圍）。
 
-回滚方式：移除 `tw` 市场识别、交易日历注册、YFinance 路由扩展与服务层/API 市场枚举及前端市场类型放行，并删除本文档中的能力声明。
+回滾方式：移除 `tw` 市場識別、交易日曆註冊、YFinance 路由擴展與服務層/API 市場 enum 及前端市場型別放行，並刪除本文檔中的能力聲明。
 
 ## 日本/韩国 Portfolio 与 Market Light 边界（Issue #1815 Phase 3）
 

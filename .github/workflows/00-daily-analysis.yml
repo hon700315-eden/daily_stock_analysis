@@ -534,6 +534,7 @@ jobs:
         with:
           name: analysis-reports-${{ github.run_number }}
           path: |
+            data/stock_analysis.db
             reports/
             logs/
           retention-days: 30

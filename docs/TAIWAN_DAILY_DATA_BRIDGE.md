@@ -212,6 +212,30 @@ The expected format is comma-separated symbols, for example
 `2330.TW,6488.TWO`. Bare Taiwan codes can work when the official index contains
 a unique TWSE/TPEX match, but explicit suffixes are preferred in automation.
 
+## Daily Analysis Output Consumption
+
+每日分析 workflow 會先下載並驗證上游台股正式 artifact，再執行
+`python main.py`。個股分析成功後，既有分析流程會把正式分析結果寫入
+SQLite `data/stock_analysis.db` 的 `analysis_history` 表；API 的
+`/api/v1/history` 與 `/api/v1/history/{id}`、Web 歷史列表與報告詳情都讀取
+同一份 `analysis_history` 資料。Portfolio 的持倉分析入口只提交分析任務並
+傳入只讀持倉 context，不會把分析建議寫入交易帳本。
+
+`analysis_history` 目前使用既有欄位契約：`code`、`name`、`report_type`、
+`sentiment_score`、`operation_advice`、`trend_prediction`、
+`analysis_summary`、`raw_result`、`news_content`、`context_snapshot` 與
+`created_at`。交易日期與資料品質主要保存在
+`context_snapshot.enhanced_context.date`、`market_phase_summary` 與
+`analysis_context_pack_overview`；現有正式表結構沒有獨立 `schema_version`
+欄位。分析失敗時不寫入 `analysis_history` 假成功記錄，API 查無歷史時依既有
+404 或空列表契約回應。
+
+GitHub Actions runner 的本機 SQLite 會隨 runner 消失，因此每日 workflow 的
+`analysis-reports-*` artifact 現在一併保留 `data/stock_analysis.db`、`reports/`
+與 `logs/`，讓每日批次的既有正式分析歷史產物可被下載稽核。這不新增第二套
+分析格式，也不改 H4 上游 artifact 契約。H4-R1 尚未等到 H4 基準後正式交易日
+artifact 前，不宣告遠端每日分析端到端已完成。
+
 ## Upstream Contract
 
 This bridge is read-only. It does not modify `TW_Stock_Dashboard_Clean`, its L2,
