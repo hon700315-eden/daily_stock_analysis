@@ -1,9 +1,9 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
+  # 定時觸發 - 每個台股交易日下午 18:00（Asia/Taipei，UTC 10:00）
   schedule:
-    - cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
+    - cron: '0 10 * * 1-5'
   
   # 手动触发
   workflow_dispatch:
@@ -27,6 +27,10 @@ on:
 concurrency:
   group: stock-analysis
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   analyze:
@@ -58,8 +62,28 @@ jobs:
       - name: 创建必要目录
         run: |
           mkdir -p data logs reports
+
+      - name: 取得上游台股正式資料 artifact
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_ARTIFACT_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/taiwan_daily_artifact_bridge.py download \
+            --repo hon700315-eden/TW_Stock_Dashboard_Clean \
+            --workflow "Daily Quant Pipeline" \
+            --artifact-prefix "tw-stock-daily-official-" \
+            --output-root "$RUNNER_TEMP/tw-stock-official"
+
+      - name: 驗證上游台股正式資料
+        run: |
+          set -euo pipefail
+          echo "TW_STOCK_DATA_ROOT=$TW_STOCK_DATA_ROOT"
+          python3 scripts/taiwan_daily_readback_smoke.py \
+            --data-root "$TW_STOCK_DATA_ROOT" \
+            --strict-official \
+            --as-of-date "$(TZ='Asia/Taipei' date '+%Y-%m-%d')"
       
-      - name: 执行股票分析
+      - name: 執行股票分析
         env:
           # ==========================================
           # AI 配置
@@ -401,11 +425,11 @@ jobs:
           # 解析自选股配置：
           # 1. Repository/Environment secrets 或 Repository variables（STOCK_LIST_CONFIG）
           # 2. 同名 Environment variables 注入的 runner 环境变量（STOCK_LIST）
-          # 3. 最小默认值
+          # 3. 台股正式最小預設值
           if [ -n "${STOCK_LIST_CONFIG:-}" ]; then
             export STOCK_LIST="$STOCK_LIST_CONFIG"
           elif [ -z "${STOCK_LIST:-}" ]; then
-            export STOCK_LIST="600519"
+            export STOCK_LIST="2330.TW"
           fi
 
           # 处理 LITELLM YAML 配置文件
@@ -422,12 +446,13 @@ jobs:
           MODE="${{ github.event.inputs.mode || 'full' }}"
           
           echo "=========================================="
-          echo "🚀 A股自选股智能分析系统"
+          echo "🚀 台股自選股智能分析系統"
           echo "=========================================="
           echo "⏰ 時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S')"
-          echo "🎯 运行模式: $MODE"
-          echo "📊 自选股: $STOCK_LIST"
-          echo "📝 报告类型: $REPORT_TYPE"
+          echo "🎯 執行模式: $MODE"
+          echo "📊 自選股: $STOCK_LIST"
+          echo "📝 報告類型: $REPORT_TYPE"
+          echo "🗂️ 台股正式資料根目錄: $TW_STOCK_DATA_ROOT"
           echo ""
           echo "=========================================="
           echo "📋 配置检查"

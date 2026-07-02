@@ -37,9 +37,24 @@ Taiwan is the formal default market for the application:
 - OTC suffix: `.TWO`
 - primary indices: 加權指數、櫃買指數
 
-`TW_STOCK_DATA_ROOT` is optional. It can point to the official Drive root, the
-synchronized `TW_Stock_Dashboard_Clean` root, or a single
-`latest_screening_package.json` file.
+`TW_STOCK_DATA_ROOT` is optional for local development. It can point to the
+official Drive root, the synchronized `TW_Stock_Dashboard_Clean` root, or a
+single `latest_screening_package.json` file.
+
+In GitHub Actions, the daily analysis workflow must not rely on a user Mac
+Google Drive mount. It downloads the latest upstream
+`tw-stock-daily-official-YYYY-MM-DD` artifact from
+`hon700315-eden/TW_Stock_Dashboard_Clean`, extracts it under `RUNNER_TEMP`, sets
+`TW_STOCK_DATA_ROOT` to the extracted `TW_Stock_Data_Drive`, and runs the strict
+readback smoke before analysis starts. Download or validation failure stops the
+workflow; it does not fall back to China market providers.
+
+Cross-repository artifact access uses `UPSTREAM_ARTIFACT_TOKEN` when configured.
+The token only needs read access to the upstream repository Actions artifacts.
+When the upstream repository is public and GitHub permits it, the workflow can
+fall back to the built-in `github.token`; private or restricted upstream access
+requires setting `UPSTREAM_ARTIFACT_TOKEN` in the
+`daily_stock_analysis` repository secrets.
 
 When unset, the bridge checks:
 
@@ -183,8 +198,31 @@ Taiwan bridge failures do not fall back to China market providers. Bare Taiwan
 common-stock quote/history requests stop at the Taiwan bridge when no formal
 Taiwan data is available.
 
+## Daily Workflow Watchlist Contract
+
+`STOCK_LIST` precedence in `.github/workflows/00-daily-analysis.yml` is:
+
+1. `vars.STOCK_LIST` or `secrets.STOCK_LIST`, exposed internally as
+   `STOCK_LIST_CONFIG`
+2. an existing runner `STOCK_LIST` environment variable from the optional
+   `STOCK_LIST` Environment
+3. the minimal Taiwan default `2330.TW`
+
+The expected format is comma-separated symbols, for example
+`2330.TW,6488.TWO`. Bare Taiwan codes can work when the official index contains
+a unique TWSE/TPEX match, but explicit suffixes are preferred in automation.
+
 ## Upstream Contract
 
 This bridge is read-only. It does not modify `TW_Stock_Dashboard_Clean`, its L2,
 L3, L5, L6, or L7 jobs, Drive layout, dashboard package schema, snapshots, or
 published fields.
+
+H4 only adds a minimal GitHub Actions artifact publication step to the existing
+upstream L7 workflow after the existing formal gates pass. The artifact contains
+only the current official trade date files required by this repository:
+
+- `01_market_data/daily_snapshot/trade_date=YYYY-MM-DD/daily_market_normalized.csv`
+- `01_market_data/daily_snapshot/trade_date=YYYY-MM-DD/snapshot_manifest.json`
+- `05_packages/trade_date=YYYY-MM-DD/package_manifest.json`
+- `06_dashboard_sync/latest_screening_package.json`
