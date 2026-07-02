@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [測試] 新增台股日更正式資料只讀 readback smoke，驗證 manifest、package、TWSE/TPEX、行情、history、technical 與缺碼不 fallback 中國市場。
 - [修復] 修正既有 network smoke 與 Docker health check 吞掉失敗後仍成功的問題。
 - [修復] 修正台股新聞 canonical query 在本機與 GitHub runner 無 Drive 索引環境間不一致，顯式 `.TW`/`.TWO` 與 `TWSE:`/`TPEX:` 輸入不依賴正式索引即可穩定收斂為內部 Yahoo suffix，裸碼交易所判定仍需既有索引證據。
+- [改進] 每日分析 workflow 的報告 artifact 保留既有 SQLite 分析歷史資料庫，並補充台股分析產物、API、Web 與 Portfolio 消費鏈文件。
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 

@@ -45,6 +45,14 @@ def test_daily_analysis_workflow_台股預設與_stock_list_契約() -> None:
     assert "MARKET_REVIEW_COLOR_SCHEME: ${{ vars.MARKET_REVIEW_COLOR_SCHEME || secrets.MARKET_REVIEW_COLOR_SCHEME || 'red_up' }}" in workflow
 
 
+def test_daily_analysis_workflow_上傳既有分析歷史資料庫() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "data/stock_analysis.db" in workflow
+    assert "reports/" in workflow
+    assert "logs/" in workflow
+
+
 def test_daily_analysis_workflow_最小權限() -> None:
     data = _workflow()
 
