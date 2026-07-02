@@ -10,9 +10,10 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -20,6 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from data_provider.base import DataFetcherManager
 from data_provider.taiwan_daily_bridge_fetcher import TaiwanDailyDataBridgeFetcher
+from src.core.trading_calendar import get_effective_trading_date
 
 
 _DEFAULT_DATA_ROOT = Path(
@@ -28,6 +30,7 @@ _DEFAULT_DATA_ROOT = Path(
 )
 _ALLOWED_SNAPSHOT_STATUS = {"retained", "success", "completed", "complete", "ok"}
 _ALLOWED_PACKAGE_STATUS = {"locked", "success", "completed", "complete", "ok"}
+_TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
 @dataclass
@@ -84,6 +87,33 @@ def _read_snapshot_rows(path: Path) -> list[dict[str, str]]:
         return [{str(k).lstrip("\ufeff"): v for k, v in row.items()} for row in reader]
 
 
+def _manifest_row_count(payload: dict[str, Any]) -> int | None:
+    row_counts = payload.get("row_counts")
+    if isinstance(row_counts, dict):
+        value = row_counts.get("total")
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    for key in ("row_count", "rowCount", "total_rows", "totalRows"):
+        if key in payload:
+            try:
+                return int(payload[key])
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _csv_trade_dates(rows: list[dict[str, str]]) -> set[str]:
+    return {str(row.get("trade_date") or row.get("date") or "").strip() for row in rows if row}
+
+
+def _expected_tw_trade_date(as_of_date: date | None = None) -> date:
+    base = as_of_date or datetime.now(_TAIPEI_TZ).date()
+    check_time = datetime.combine(base, time(18, 0), tzinfo=_TAIPEI_TZ)
+    return get_effective_trading_date("tw", check_time)
+
+
 def _iter_package_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     screening = payload.get("screening_results")
@@ -113,7 +143,13 @@ def _validate_quote(fetcher: TaiwanDailyDataBridgeFetcher, symbol: str) -> dict[
     return quote
 
 
-def run_smoke(data_root: Path, *, max_stale_calendar_days: int) -> SmokeResult:
+def run_smoke(
+    data_root: Path,
+    *,
+    max_stale_calendar_days: int,
+    strict_official: bool = False,
+    as_of_date: date | None = None,
+) -> SmokeResult:
     checks: dict[str, Any] = {"data_root": str(data_root)}
     errors: list[str] = []
 
@@ -158,28 +194,61 @@ def run_smoke(data_root: Path, *, max_stale_calendar_days: int) -> SmokeResult:
     package_status = _status_text(package_manifest)
     package_metadata = package.get("metadata") if isinstance(package.get("metadata"), dict) else {}
     package_metadata_status = str(package_metadata.get("status") or "").strip().lower()
+    path_trade_date = snapshot_csv.parent.name.split("trade_date=", 1)[-1]
+    package_trade_date = str(package_metadata.get("tradeDate") or package_metadata.get("trade_date") or "")
+    snapshot_manifest_trade_date = str(snapshot_manifest.get("trade_date") or "")
+    package_manifest_trade_date = str(package_manifest.get("trade_date") or "")
+    csv_trade_dates = _csv_trade_dates(rows)
+    manifest_row_count = _manifest_row_count(snapshot_manifest)
     trade_date = str(
         snapshot_manifest.get("trade_date")
         or package_manifest.get("trade_date")
         or package_metadata.get("tradeDate")
-        or snapshot_csv.parent.name.split("trade_date=", 1)[-1]
+        or path_trade_date
     )
     checks.update(
         {
             "latest_trade_date": trade_date,
+            "path_trade_date": path_trade_date,
+            "snapshot_manifest_trade_date": snapshot_manifest_trade_date,
+            "package_manifest_trade_date": package_manifest_trade_date,
+            "package_metadata_trade_date": package_trade_date,
+            "csv_trade_dates": sorted(csv_trade_dates),
             "snapshot_manifest_status": snapshot_status,
             "package_manifest_status": package_status,
             "package_metadata_status": package_metadata_status,
             "snapshot_row_count": len(rows),
+            "snapshot_manifest_row_count": manifest_row_count,
         }
     )
 
-    if snapshot_status not in _ALLOWED_SNAPSHOT_STATUS:
+    if strict_official and snapshot_status != "retained":
+        errors.append(f"snapshot manifest 狀態必須為 retained，實際為：{snapshot_status or 'missing'}")
+    elif snapshot_status not in _ALLOWED_SNAPSHOT_STATUS:
         errors.append(f"snapshot manifest 狀態不可用：{snapshot_status or 'missing'}")
-    if package_status not in _ALLOWED_PACKAGE_STATUS:
+    if strict_official and package_status != "locked":
+        errors.append(f"package manifest 狀態必須為 locked，實際為：{package_status or 'missing'}")
+    elif package_status not in _ALLOWED_PACKAGE_STATUS:
         errors.append(f"package manifest 狀態不可用：{package_status or 'missing'}")
-    if package_metadata_status and package_metadata_status not in _ALLOWED_SNAPSHOT_STATUS:
+    if strict_official and package_metadata_status != "success":
+        errors.append(f"package metadata 狀態必須為 success，實際為：{package_metadata_status or 'missing'}")
+    elif package_metadata_status and package_metadata_status not in _ALLOWED_SNAPSHOT_STATUS:
         errors.append(f"package metadata 狀態不可用：{package_metadata_status}")
+    if len(rows) <= 0:
+        errors.append("snapshot CSV row count 必須大於 0")
+    if manifest_row_count is not None and manifest_row_count != len(rows):
+        errors.append(f"snapshot CSV row count 與 manifest 不一致：csv={len(rows)} manifest={manifest_row_count}")
+    expected_trade_dates = {
+        path_trade_date,
+        snapshot_manifest_trade_date,
+        package_manifest_trade_date,
+        package_trade_date,
+        *csv_trade_dates,
+    }
+    if "" in expected_trade_dates:
+        errors.append("正式資料 trade_date 欄位缺漏")
+    if len(expected_trade_dates - {""}) != 1:
+        errors.append(f"正式資料 trade_date 不一致：{sorted(expected_trade_dates)}")
 
     try:
         parsed_trade_date = _parse_trade_date(trade_date)
@@ -188,10 +257,14 @@ def run_smoke(data_root: Path, *, max_stale_calendar_days: int) -> SmokeResult:
         parsed_trade_date = None
     if parsed_trade_date is not None:
         checks["latest_trade_date_weekday"] = parsed_trade_date.weekday()
-        checks["latest_trade_date_age_calendar_days"] = (date.today() - parsed_trade_date).days
+        expected_tw_date = _expected_tw_trade_date(as_of_date)
+        checks["expected_tw_trade_date"] = expected_tw_date.isoformat()
+        checks["latest_trade_date_age_calendar_days"] = (expected_tw_date - parsed_trade_date).days
         if parsed_trade_date.weekday() >= 5:
             errors.append(f"資料日期不是週一至週五：{trade_date}")
-        if (date.today() - parsed_trade_date).days > max_stale_calendar_days:
+        if strict_official and parsed_trade_date != expected_tw_date:
+            errors.append(f"正式資料日期 stale：latest={trade_date} expected={expected_tw_date.isoformat()}")
+        elif (date.today() - parsed_trade_date).days > max_stale_calendar_days:
             errors.append(f"資料日期 stale：{trade_date}")
 
     markets = {str(row.get("market") or "").strip().upper() for row in rows}
@@ -264,11 +337,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="只讀驗證台股日更正式資料")
     parser.add_argument("--data-root", help="TW_Stock_Data_Drive 根目錄；未提供時讀 TW_STOCK_DATA_ROOT 或既有預設路徑")
     parser.add_argument("--max-stale-calendar-days", type=int, default=7)
+    parser.add_argument("--strict-official", action="store_true", help="啟用 workflow artifact 正式資料嚴格契約")
+    parser.add_argument("--as-of-date", help="以 YYYY-MM-DD 指定台北日期，供 workflow 與測試驗證 stale")
     args = parser.parse_args(argv)
 
     result = run_smoke(
         _resolve_data_root(args.data_root),
         max_stale_calendar_days=args.max_stale_calendar_days,
+        strict_official=args.strict_official,
+        as_of_date=_parse_trade_date(args.as_of_date) if args.as_of_date else None,
     )
     payload = {
         "status": "PASS" if result.passed else "FAIL",

@@ -85,21 +85,21 @@ WEB_SETTINGS_HIDDEN_FROM_UI = {
 _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "STOCK_LIST": {
         "title": "Stock List",
-        "description": "Comma-separated watchlist stock codes.",
+        "description": "Comma-separated watchlist stock codes. Taiwan symbols such as 2330.TW and 6488.TWO are the default examples.",
         "category": "base",
         "data_type": "array",
         "ui_control": "textarea",
         "is_sensitive": False,
         "is_required": False,
         "is_editable": True,
-        "default_value": "600519,300750,002594",
+        "default_value": "2330.TW,6488.TWO",
         "options": [],
         "validation": {"min_items": 1},
         "display_order": 10,
         "help_key": "settings.base.STOCK_LIST",
         "examples": [
-            "STOCK_LIST=600519,300750,002594",
-            "STOCK_LIST=600519,hk00700,AAPL",
+            "STOCK_LIST=2330.TW,6488.TWO",
+            "STOCK_LIST=2330.TW,hk00700,AAPL",
         ],
         "docs": [
             {
